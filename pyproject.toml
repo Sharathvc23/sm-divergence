@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sm-divergence"
+version = "0.7.1"
+description = "Catch a cheating registry by corroboration — omission/endpoint/DID + cross-DID-method key divergence for federated agent discovery, on the sm-resolver kernel."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Sharath (Stellarminds)" }]
+keywords = ["ai-agents", "nanda", "registry", "discovery", "federation", "accountability"]
+dependencies = [
+    "httpx>=0.24",
+    "sm-resolver>=0.1",
+]
+
+[project.optional-dependencies]
+# Verified-DID divergence needs Ed25519 + did:key decoding; kept optional so
+# the omission/endpoint checks stay dependency-light.
+attestation = ["cryptography>=42", "base58>=2.1", "jcs>=0.2.1"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "cryptography>=42",
+    "base58>=2.1",
+    "jcs>=0.2.1",
+]
+
+[project.scripts]
+sm-divergence = "sm_divergence.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Sharathvc23/sm-divergence"
+Spec = "https://github.com/Sharathvc23/sm-divergence/blob/main/SPEC.md"
+Whitepaper = "https://github.com/Sharathvc23/sm-divergence/blob/main/WHITEPAPER.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sm_divergence"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["sm_divergence"]
