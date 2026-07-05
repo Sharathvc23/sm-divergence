@@ -31,8 +31,10 @@ async def main() -> None:
     did_web = DidWebResolver(
         did_for=lambda a: "did:web:acme.example", transport=serves_key(IMPOSTER_KEY), label="did:web"
     )
-    for f in await Corroborator([did_key, did_web]).check(["acme"]):
-        print(f"  [{f.kind}] {f.agent_id}: {f.detail}")
+    for r in await Corroborator([did_key, did_web]).check(["acme"]):
+        print(f"  {r.agent_id}: {r.verdict}")
+        for f in r.findings:
+            print(f"    [{f.kind}/{f.confirmation}] {f.detail}")
 
 
 if __name__ == "__main__":

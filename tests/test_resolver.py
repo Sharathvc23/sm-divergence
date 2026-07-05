@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from _sweep import kinds, verdict_of
 
 from sm_divergence import DivergenceDetector, HttpByIdResolver, NandaIndexV2Resolver, Resolver
 
@@ -53,7 +54,9 @@ async def test_detector_dedupes_by_label() -> None:
     r2 = HttpByIdResolver("https://other.example", label="same")
     det = DivergenceDetector([r1, r2])
     assert det.registries == ["same"]  # second dropped — a check needs two DISTINCT sources
-    assert await det.check(["x"]) == []  # only one distinct resolver → no-op
+    results = await det.check(["x"])
+    assert kinds(results) == []
+    assert verdict_of(results, "x") == "INSUFFICIENT"  # only one distinct resolver
 
 
 @pytest.mark.asyncio
@@ -74,6 +77,8 @@ async def test_mixed_resolver_types_diverge() -> None:
             NandaIndexV2Resolver("https://index.example", transport=_transport(nanda), label="nanda"),
         ]
     )
-    findings = await det.check(["x"])
-    assert [f.kind for f in findings] == ["endpoint"]
-    assert findings[0].detail["values"] == {"nanda": "https://attacker.example", "nest": "https://real.example"}
+    results = await det.check(["x"])
+    found = [f for r in results for f in r.findings]
+    assert [f.kind for f in found] == ["endpoint"]
+    # RFC 3986-normalized (empty path → "/")
+    assert found[0].detail["values"] == {"nanda": "https://attacker.example/", "nest": "https://real.example/"}

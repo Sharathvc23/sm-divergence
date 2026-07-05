@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 import pytest
+from _sweep import kinds
 
 from sm_divergence import Corroborator, Status, diff_views
 
@@ -62,8 +63,8 @@ async def test_corroborator_drives_any_resolver_type() -> None:
     b = FakeResolver("src-b", {"x": ("present", KeyView(key="did:key:zBBB"))})
     emitted = []
     corr: Corroborator[KeyView] = Corroborator([a, b], on_finding=emitted.append)
-    findings = await corr.check(["x"])
-    assert [f.kind for f in findings] == ["key"]
+    results = await corr.check(["x"])
+    assert kinds(results) == ["key"]
     assert len(emitted) == 1
     assert corr.labels == ["src-a", "src-b"]
 
@@ -77,6 +78,7 @@ async def test_corroborator_omission_and_no_claim() -> None:
     unreachable = FakeResolver("src-c", {"x": ("error", None)})
 
     corr: Corroborator[KeyView] = Corroborator([present, absent, unreachable])
-    findings = await corr.check(["x"])
-    assert [f.kind for f in findings] == ["omission"]
-    assert findings[0].detail == {"present_on": ["src-a"], "missing_from": ["src-b"]}
+    results = await corr.check(["x"])
+    found = [f for r in results for f in r.findings]
+    assert [f.kind for f in found] == ["omission"]
+    assert found[0].detail == {"present_on": ["src-a"], "missing_from": ["src-b"]}

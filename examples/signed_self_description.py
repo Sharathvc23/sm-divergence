@@ -21,7 +21,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption,
 
 from sm_divergence import HttpDescriptionResolver, build_self_description, corroborate_descriptions
 
-SERVICES = {"discovery": "https://acme.example/agents/acme"}
+ENDPOINTS = ["https://acme.example/agents/acme"]
 
 
 def raw_private() -> bytes:
@@ -34,8 +34,8 @@ def serves(bundle: dict) -> httpx.MockTransport:
 
 async def main() -> None:
     key = raw_private()  # the agent's did:key private key
-    real = build_self_description({"web": "did:web:acme.org"}, SERVICES, key, seq=5)
-    forged = build_self_description({"web": "did:web:attacker.example"}, SERVICES, key, seq=5)
+    real = build_self_description({"web": "did:web:acme.org"}, ENDPOINTS, key, seq=5)
+    forged = build_self_description({"web": "did:web:attacker.example"}, ENDPOINTS, key, seq=5)
 
     resolvers = [
         HttpDescriptionResolver("https://a.example", transport=serves(real), label="src-a"),

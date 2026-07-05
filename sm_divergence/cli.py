@@ -5,8 +5,13 @@
         --registry https://registry-b.example \
         --watch agent-1 --watch agent-2
 
-Exit code is 0 when the registries agree, 2 when any divergence is found (so a
-cron or CI step fails loudly), and 1 on a usage error.
+Exit code is 0 when every watched id agrees (or is INSUFFICIENT), 2 when any id
+is DIVERGENT (so a cron or CI step fails loudly), and 1 on a usage error.
+
+Pass ``--sweeper-key PATH`` (a file of 64 hex chars = 32 raw Ed25519 bytes) to
+emit a signed Corroboration Record per subject instead of a findings summary —
+the auditable, content-addressed attestation that the sweep ran (draft §9). This
+needs the ``attestation`` extra.
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ import json
 import sys
 from collections.abc import Sequence
 
-from sm_resolver import Finding, Resolver
+from sm_resolver import Resolver, SweepResult
 
 from .detector import check_once
 from .discovery import DEFAULT_PATH, NandaIndexV2Resolver, RecordAdapter, RecordView, default_adapter
@@ -56,17 +61,29 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also compare verified DIDs from signed records (needs the 'attestation' extra).",
     )
-    check.add_argument("--json", action="store_true", help="Emit findings as JSON.")
+    check.add_argument(
+        "--sweeper-key",
+        metavar="PATH",
+        help="File of 64 hex chars (32-byte Ed25519 private key); emit a signed Corroboration Record per subject.",
+    )
+    check.add_argument("--json", action="store_true", help="Emit results as JSON.")
     return parser
 
 
-def _format_text(findings: list[Finding]) -> str:
-    if not findings:
-        return "OK — registries agree on all watched ids."
-    lines = [f"DIVERGENCE — {len(findings)} finding(s):"]
-    for f in findings:
-        lines.append(f"  [{f.kind}] {f.agent_id}: {json.dumps(f.detail, sort_keys=True)}")
+def _format_text(results: list[SweepResult[RecordView]]) -> str:
+    lines: list[str] = []
+    for r in results:
+        lines.append(f"{r.agent_id}: {r.verdict}")
+        for f in r.findings:
+            lines.append(f"  [{f.kind}/{f.confirmation}] {json.dumps(f.detail, sort_keys=True)}")
+    if not any(r.verdict == "DIVERGENT" for r in results):
+        lines.append("OK — no divergence on watched ids.")
     return "\n".join(lines)
+
+
+def _load_key(path: str) -> bytes:
+    with open(path, encoding="utf-8") as fh:
+        return bytes.fromhex(fh.read().strip())
 
 
 async def _run_check(args: argparse.Namespace) -> int:
@@ -89,13 +106,24 @@ async def _run_check(args: argparse.Namespace) -> int:
     registries: list[str | Resolver[RecordView]] = list(http_registries)
     registries += [NandaIndexV2Resolver(u, adapter=adapter, timeout=args.timeout) for u in index_urls]
 
-    findings = await check_once(registries, watch, adapter=adapter, path=args.path, timeout=args.timeout)
+    results = await check_once(registries, watch, adapter=adapter, path=args.path, timeout=args.timeout)
 
-    if args.json:
-        print(json.dumps([f.to_dict() for f in findings], sort_keys=True, indent=2))
+    if args.sweeper_key:
+        from .record import sign_sweep
+
+        key = _load_key(args.sweeper_key)
+        records = sign_sweep(results, sweeper_private_key=key)
+        print(json.dumps(records, sort_keys=True, indent=2))
+    elif args.json:
+        payload = [
+            {"agent_id": r.agent_id, "verdict": r.verdict, "findings": [f.to_dict() for f in r.findings]}
+            for r in results
+        ]
+        print(json.dumps(payload, sort_keys=True, indent=2))
     else:
-        print(_format_text(findings))
-    return EXIT_DIVERGENCE if findings else EXIT_OK
+        print(_format_text(results))
+
+    return EXIT_DIVERGENCE if any(r.verdict == "DIVERGENT" for r in results) else EXIT_OK
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -2,6 +2,11 @@
 
 *Personal research contribution by [Stellarminds.ai](https://stellarminds.ai), aligned with [Project NANDA](https://projectnanda.org) standards.*
 
+> The procedure described here is specified normatively in the IETF draft
+> *Multi-Source Corroboration for AI Agent Discovery*
+> (`draft-chandra-agent-registry-corroboration-00`); `sm-divergence` (with the
+> `sm-resolver` kernel) is its reference implementation.
+
 ---
 
 ## Abstract

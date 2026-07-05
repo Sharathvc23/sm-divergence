@@ -39,8 +39,10 @@ async def main() -> None:
             HttpByIdResolver("https://reg-c.example", transport=registry(None), label="reg-c"),
         ]
     )
-    for f in await detector.check(["acme"]):
-        print(f"  [{f.kind}] {f.agent_id}: {f.detail}")
+    for r in await detector.check(["acme"]):
+        print(f"  {r.agent_id}: {r.verdict}")
+        for f in r.findings:
+            print(f"    [{f.kind}/{f.confirmation}] {f.detail}")
 
 
 if __name__ == "__main__":

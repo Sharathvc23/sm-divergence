@@ -42,7 +42,7 @@ def test_divergence_exits_two(_route: dict[str, object], capsys: pytest.CaptureF
     _route["registry-b.example"] = "https://attacker.example"
     code = cli.main(["check", "--registry", A, "--registry", B, "--watch", "x"])
     assert code == cli.EXIT_DIVERGENCE
-    assert "DIVERGENCE" in capsys.readouterr().out
+    assert "DIVERGENT" in capsys.readouterr().out
 
 
 def test_json_output(_route: dict[str, object], capsys: pytest.CaptureFixture[str]) -> None:
@@ -89,7 +89,7 @@ def test_mixed_registry_and_nanda_index_diverge(
 
     code = cli.main(["check", "--registry", A, "--nanda-index", IDX, "--watch", "x"])
     assert code == cli.EXIT_DIVERGENCE
-    assert "DIVERGENCE" in capsys.readouterr().out
+    assert "DIVERGENT" in capsys.readouterr().out
 
 
 def test_two_nanda_indexes_satisfy_minimum(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -12,7 +12,7 @@ from .client import DEFAULT_PATH, RecordAdapter, default_adapter, fetch_view, lo
 from .closure import binds_by_did
 from .http_by_id import HttpByIdResolver
 from .index_v2 import NandaIndexV2Resolver, identity_locator
-from .views import DID, ENDPOINT, RecordView
+from .views import DID, ENDPOINT, RecordView, normalize_endpoint
 
 __all__ = [
     "DEFAULT_PATH",
@@ -27,6 +27,7 @@ __all__ = [
     "fetch_view",
     "identity_locator",
     "looks_absent",
+    "normalize_endpoint",
     "signed_record_adapter",
     "verified_did",
 ]

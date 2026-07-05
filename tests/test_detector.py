@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from _sweep import kinds, verdict_of
 
 from sm_divergence import DivergenceDetector, Finding, check_once
 
@@ -49,13 +50,15 @@ def _install(transport: httpx.MockTransport) -> None:
 
 
 @pytest.mark.asyncio
-async def test_single_registry_is_noop() -> None:
+async def test_single_registry_is_insufficient() -> None:
     _install(_routed({"registry-a.example": {"endpoint": "https://x.example"}}))
-    assert await check_once([A], ["x"]) == []
+    results = await check_once([A], ["x"])
+    assert kinds(results) == []
+    assert verdict_of(results, "x") == "INSUFFICIENT"
 
 
 @pytest.mark.asyncio
-async def test_agreement_no_findings() -> None:
+async def test_agreement_verdict_agree() -> None:
     _install(
         _routed(
             {
@@ -64,7 +67,9 @@ async def test_agreement_no_findings() -> None:
             }
         )
     )
-    assert await check_once([A, B], ["x"]) == []
+    results = await check_once([A, B], ["x"])
+    assert kinds(results) == []
+    assert verdict_of(results, "x") == "AGREE"
 
 
 @pytest.mark.asyncio
@@ -77,21 +82,25 @@ async def test_endpoint_divergence_detected() -> None:
             }
         )
     )
-    findings = await check_once([A, B], ["x"])
-    assert [f.kind for f in findings] == ["endpoint"]
+    results = await check_once([A, B], ["x"])
+    assert kinds(results) == ["endpoint"]
+    assert verdict_of(results, "x") == "DIVERGENT"
 
 
 @pytest.mark.asyncio
 async def test_omission_detected() -> None:
     _install(_routed({"registry-a.example": {"endpoint": "https://x.example"}, "registry-b.example": 404}))
-    findings = await check_once([A, B], ["x"])
-    assert [f.kind for f in findings] == ["omission"]
+    results = await check_once([A, B], ["x"])
+    assert kinds(results) == ["omission"]
+    assert verdict_of(results, "x") == "DIVERGENT"
 
 
 @pytest.mark.asyncio
 async def test_unreachable_registry_makes_no_claim() -> None:
     _install(_routed({"registry-a.example": {"endpoint": "https://x.example"}, "registry-b.example": None}))
-    assert await check_once([A, B], ["x"]) == []
+    results = await check_once([A, B], ["x"])
+    assert kinds(results) == []
+    assert verdict_of(results, "x") == "INSUFFICIENT"  # one present + one error, not decisive
 
 
 @pytest.mark.asyncio
@@ -108,8 +117,8 @@ async def test_on_finding_fires_once_per_finding() -> None:
     det = DivergenceDetector([A, B], on_finding=emitted.append)
     first = await det.check(["x"])
     second = await det.check(["x"])
-    assert [f.kind for f in first] == ["endpoint"]
-    assert [f.kind for f in second] == ["endpoint"]  # still returned
+    assert kinds(first) == ["endpoint"]
+    assert kinds(second) == ["endpoint"]  # still returned
     assert len(emitted) == 1  # but only emitted once
 
 
@@ -118,4 +127,6 @@ async def test_duplicate_registries_deduped() -> None:
     _install(_routed({"registry-a.example": {"endpoint": "https://x.example"}}))
     det = DivergenceDetector([A, A, A])
     assert det.registries == [A]
-    assert await det.check(["x"]) == []
+    results = await det.check(["x"])
+    assert kinds(results) == []
+    assert verdict_of(results, "x") == "INSUFFICIENT"

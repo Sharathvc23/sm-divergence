@@ -1,12 +1,19 @@
 # Corroboration Divergence — Detection Procedure
 
-**Spec version:** `divergence/0.2-draft`
+**Spec version:** `divergence/0.3-draft`
 **Status:** DRAFT / Working Draft
-**Version identifier (wire):** `divergence/0.2`
+**Version identifier (wire):** `divergence/0.3`
 **Last edited:** 2026-07-04
 **Signing/identity substrate (optional):** JCS canonicalization, Ed25519, `did:key` — the convention shared across the `sm-*` family.
 
 The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, MAY are to be interpreted as in RFC 2119.
+
+This procedure is specified normatively in the IETF draft *Multi-Source
+Corroboration for AI Agent Discovery*
+(`draft-chandra-agent-registry-corroboration-00`); `sm-divergence` is that
+draft's reference implementation. Parenthesised `draft §N` citations below point
+at the corresponding draft section. **CORR-DIGEST** is `lowercase-hex(SHA-256(JCS(v)))`; values in
+digest-bearing fields MUST NOT be JSON floats.
 
 ---
 
@@ -29,10 +36,13 @@ diff, not the wire format. The same procedure serves a **discovery** layer
 
 Owns:
 
-- The **claim classification** for one source × one agent: `present`, `absent`,
-  or `error` (§3).
-- The **view contract** — how a present claim is reduced to comparable fields (§4).
-- The **diff** turning per-source claims into `omission` and per-field findings (§5).
+- The **claim classification** for one source × vantage × agent: `present`,
+  `absent`, or `error` (§3).
+- The **view contract** — how a present claim is reduced to comparable fields,
+  with canonicalization (§4).
+- The **diff** turning claims into `omission`, `source_equivocation`, and
+  per-field findings, with confirmation (§5).
+- The **verdict** per subject and the signed **Corroboration Record** (§6, §9).
 
 Does NOT own: the source itself; the record/document format or its signing (a
 consumer supplies a resolver that maps a source answer to a view); remediation or
@@ -51,12 +61,14 @@ comparison across sources — with a distinct failure mode and distinct evidence
 | Term | Meaning |
 | --- | --- |
 | **Source** | Anything that answers "what do you have for agent *X*?" — a registry, a DID method, a catalog. |
+| **Vantage** | A network perspective a source is observed from (a region, a resolver instance); MAY be `null`. Preserved as a distinct axis from *source* (draft §3). |
 | **Watch set** | The agent ids a consumer compares across sources. |
-| **Claim** | One source's answer about one agent, classified `present`/`absent`/`error` (§3). |
+| **Claim** | One source's answer about one agent from one vantage at one instant: `(source, vantage, status, view, observed_at)`, classified `present`/`absent`/`error` (§3). |
 | **View** | The comparable reduction of a present claim: named string fields via `comparable()` (§4). |
-| **Resolver** | The per-source adapter: canonical id → `(Status, View)` (§6). |
-| **Corroborator** | The orchestration: resolve all sources, diff, emit (§6). |
-| **Finding** | One detected disagreement: `{kind, agent_id, detail}` (§5). |
+| **Resolver** | The per-source adapter: canonical id → `(Status, View)` (§6). MAY expose a `vantage`. |
+| **Corroborator** | The orchestration: resolve all (source, vantage), diff, confirm, and return a verdict per subject (§6). |
+| **Finding** | One detected disagreement: `{kind, agent_id, confirmation, detail}` (§5). |
+| **Verdict** | A subject's sweep outcome: `AGREE`, `DIVERGENT`, or `INSUFFICIENT` (§6). |
 
 ## 3. Classifying one source's claim
 
@@ -84,11 +96,22 @@ unverifiable or missing field is not a disagreement). The view type is the
 layer's choice — discovery uses `RecordView{endpoint, did}`, identity uses
 `DidView{key}` — and the diff (§5) is identical regardless.
 
+**Canonicalization (draft §5).** A layer MUST canonicalize a field before it
+enters the view, so two references to the same resource compare equal. For
+URI-valued fields (e.g. `endpoint`) an implementation MUST apply RFC 3986 §6
+syntax-based normalization — lowercase scheme and host, drop the scheme's default
+port, empty path → `/`. For key-valued fields the `did:key` multibase form is the
+comparison encoding. Where a field carries its own proof (a signed record's `did`,
+a key), the resolver MUST populate it only from a verified artifact whose subject
+binds to the outer id; on any verification failure the field is `null`, and an
+unverified value MUST NOT produce a divergence against a verified one
+(no-laundering).
+
 ## 5. The diff
 
-Input is a mapping `views[source][agent_id]` where each entry is a view
-(present), `null` (absent), or *absent from the mapping* (the `error` case — no
-claim). For each id in the watch set:
+Input is the set of claims for one agent in one sweep (each a `(source, vantage,
+status, view, observed_at)` tuple). `error` claims contribute nothing. For each
+id in the watch set:
 
 ### 5.1 `omission`
 
@@ -97,18 +120,40 @@ Emit an `omission` finding iff the id is `present` on ≥1 source AND `absent` o
 contributes to neither. Detail: `{present_on, missing_from}` (sorted source
 lists).
 
-### 5.2 Field divergence
+### 5.2 `source_equivocation` (draft §6.3)
 
-For each field name appearing in any present view's `comparable()`, collect the
-non-`None` values keyed by source. Emit a finding of `kind = <field name>` iff
-more than one distinct value appears. Detail is uniform: `{"field": <name>,
-"values": {source: value}}`. Thus discovery yields `endpoint` / `did` findings
-and identity yields `key` findings, from the same code.
+For each source observed from more than one vantage, if that source's vantages
+yield differing non-`None` values for a field, emit a `source_equivocation`
+finding attributing that source. Detail: `{source, field, values}` where `values`
+maps vantage labels to values. A source under `source_equivocation` for a field
+contributes **no** single agreed value to §5.3 for that field (a source that
+disagrees with itself cannot corroborate); its per-vantage values are retained for
+audit.
 
-### 5.3 Determinism
+### 5.3 Field divergence
+
+For each field name appearing in any present view's `comparable()`, take each
+non-equivocating source's value agreed by its vantages. Emit a finding of `kind =
+<field name>` iff more than one distinct value appears **across sources**. Detail
+is uniform: `{"field": <name>, "values": {source: value}}`. Thus discovery yields
+`endpoint` / `did` findings and identity yields `key` findings, from the same code.
+
+### 5.4 Determinism
 
 The diff MUST be pure: deterministic ordering, no I/O, no raising. A single id
 MAY produce multiple findings (e.g. an `omission` and a field divergence).
+
+### 5.5 Confirmation (draft §7)
+
+Every claim carries `observed_at` (epoch seconds). Every finding carries a
+`confirmation` state: **`suspected`** on first observation, **`confirmed`** once
+re-observed in a later sweep whose `observed_at` exceeds the first observation by
+at least the deployment's configured **staleness window** (derived from the
+sources' propagation characteristics). The window absorbs legitimate propagation
+lag; only persistent disagreement is confirmed. Confirmation is evaluated
+deterministically from recorded timestamps — no external clock — and a finding's
+dedup fingerprint MUST exclude `confirmation`. Consumers SHOULD treat `suspected`
+as a monitoring signal and `confirmed` as evidence.
 
 ## 6. Resolver and Corroborator
 
@@ -121,10 +166,15 @@ unparseable source is `error` (§3), never a false `absent` — and carries a st
 MAY be compared in one run.
 
 A **Corroborator** takes two or more resolvers, resolves each watch id against
-each, builds the `views` mapping, and applies §5. Fewer than two sources → no-op
-(nothing to corroborate). It SHOULD deduplicate emitted findings by a stable
-fingerprint over `{kind, agent_id, detail}`, so a persisting divergence notifies
-once while still appearing in each check's full result.
+each `(source, vantage)`, applies §5, and returns one result per subject: a
+**verdict** and the claims (with `error` claims retained for audit) and findings.
+Resolvers are deduped by `(label, vantage)`. The verdict is **`INSUFFICIENT`**
+when fewer than two decisive (`present`/`absent`) claims exist (nothing to
+corroborate — a Corroborator MUST NOT report agreement in that case),
+**`DIVERGENT`** when any finding is present, else **`AGREE`**. It SHOULD
+deduplicate emitted findings by a stable fingerprint over `{kind, agent_id,
+detail}`, so a persisting divergence notifies once while still appearing in each
+check's full result.
 
 ## 7. Layer instantiations (reference)
 
@@ -179,26 +229,39 @@ procedure cannot infer it; §7's resolvers take it as a caller-supplied mapping
 *proven* instead of trusted: the agent signs a bundle asserting its own aliases
 and service endpoints with its `did:key`.
 
-Bundle: `{descriptor, sig}` where `descriptor` carries `v`, `did` (the signer's
-`did:key`), `seq` (a monotonic counter), `aliases` (namespace → the agent's name
-there), `services` (kind → endpoint), `issued_at`, `expires_at`. Verification:
+Bundle (draft §8 — a flat object; `signature` is a member, over the JCS of every
+other member):
 
-1. decode the Ed25519 key from `descriptor.did`;
-2. verify `sig` (base64) over the JCS-canonical `descriptor`;
-3. reject if `now > expires_at`; `seq` MUST be an integer (not a bool);
-4. `aliases` and `services` MUST be string→string maps.
+```
+{
+  "version": "self-description/0.1",
+  "subject": "did:key:z…",          // the signer's did:key
+  "seq": 7,                          // monotonic counter
+  "aliases":   { "<namespace>": "<name>", … },
+  "endpoints": [ "<uri>", … ],
+  "signature": "<base64 Ed25519 over JCS of all other members>"
+}
+```
 
-Verification is offline (the `did:key` is the key).
+Verification:
+
+1. `version` MUST equal `self-description/0.1`; `seq` MUST be an integer (not a bool);
+2. decode the Ed25519 key from `subject`;
+3. verify `signature` (base64) over the JCS-canonical bundle **minus** `signature`;
+4. `aliases` MUST be a string→string map, `endpoints` a list of strings.
+
+There is no expiry: freshness is supersession by `seq` (§8.1), so verification is
+offline (the `did:key` is the key) and consults no clock.
 
 ### 8.1 Supersession and agent equivocation
 
-A signed description stays validly signed forever, so freshness alone (`expires_at`)
-does not prevent a source from replaying a superseded description within its
-window. `seq` orders them: **the highest `seq` supersedes.** When descriptions are
-collected from multiple sources (§8.2), a consumer MUST reconcile by `seq`:
+A signed description stays validly signed forever, so a source could replay a
+superseded description. `seq` orders them: **the highest `seq` supersedes.** When
+descriptions are collected from multiple sources (§8.2), a consumer MUST reconcile
+by `seq`:
 
 - among the descriptions at the highest observed `seq`, if two carry different
-  substantive content (different `did`/`aliases`/`services`), the agent's own key
+  JCS bytes (different `subject`/`aliases`/`endpoints`), the agent's own key
   signed two conflicting statements — **`agent_equivocation`** (key compromise or
   a lying agent). Correspondence MUST fail closed (no canonical description).
 - a source presenting a description below the highest `seq` is **stale** (a
@@ -229,9 +292,44 @@ diverging from the agent's own signature. Two rules bound this:
   axiom "resolve FROM the identity, verify BACK to it", so a malicious agent
   naming a victim's alias cannot manufacture a divergence against the victim. The
   bind-back is layer-specific: discovery — the record's verified `did` equals the
-  description's `did`; identity — the resolved key equals the `did:key`'s key.
+  description's `subject`; identity — the resolved key equals the `subject`
+  `did:key`'s key.
 
-## 9. Ownership map (what this is *not*)
+## 9. The Corroboration Record (draft §9)
+
+An implementation SHOULD seal each sweep into a signed, content-addressed
+**Corroboration Record** — one per `(sweep, subject)`, **whatever the verdict**.
+A trail recording only disagreements cannot prove its checks ran; the `AGREE`
+record is the positive attestation a downstream consumer binds.
+
+```
+{
+  "version": "corroboration/0.1",
+  "record_id": "<CORR-DIGEST of every member except record_id and signature>",
+  "subject": { "agent_id": "<id>", "did": "<did:key or null>" },
+  "observed_at": "<RFC 3339 UTC, Z>",
+  "staleness_window_s": <integer>,
+  "verdict": "AGREE" | "DIVERGENT" | "INSUFFICIENT",
+  "claims":   [ { "source", "vantage", "status", "view", "outcome" }, … ],
+  "findings": [ { "kind", "agent_id", "confirmation", "detail" }, … ],
+  "sweeper": "did:key:z…",
+  "signature": "<base64 Ed25519 over JCS of all other members>"
+}
+```
+
+Rules:
+
+1. `record_id` MUST equal the CORR-DIGEST of the record minus `record_id` and
+   `signature`; a verifier MUST recompute and compare.
+2. `signature` MUST verify against the key `sweeper` encodes (offline). A record
+   MAY additionally be anchored in an append-only transparency service; a consumer
+   MUST NOT report that anchored tier without verifying an inclusion proof against
+   a log key it trusts.
+3. Count/window/time values are exact integers or strings; no JSON float appears.
+4. `claims` MUST include `error`-status entries (excluded from the diff, retained
+   for audit).
+
+## 10. Ownership map (what this is *not*)
 
 - **The record/document format and its signing** — the AgentFacts /
   self-certifying-record / DID-document layer. This procedure verifies (§7) but
@@ -241,18 +339,23 @@ diverging from the agent's own signature. Two rules bound this:
   single-source consistent lying (out of scope; see WHITEPAPER).
 - **Remediation policy** — what a caller does on a finding.
 
-## 10. Conformance (corpus plan)
+## 11. Conformance (corpus plan)
 
 A conforming implementation MUST reproduce, for a fixed set of per-source claim
-inputs, the exact finding set of §5, including: agreement → none; `present` +
-`absent` → `omission` with correct `present_on`/`missing_from`; distinct field
-values → a finding of that field's `kind` with `{field, values}`; a single or
-identical field value → none; one verified value beside one `None` → none;
-`error`/unreachable source → excluded (no `omission`); soft-404 → `absent`; one
-id → multiple simultaneous findings where applicable. The corpus is view-agnostic
-and reused by every layer.
+inputs, the exact finding set of §5 and verdict of §6, including: agreement →
+`AGREE`, none; `present` + `absent` → `DIVERGENT`, `omission` with correct
+`present_on`/`missing_from`; distinct cross-source field values → `DIVERGENT`, a
+finding of that field's `kind` with `{field, values}`; a source's vantages
+disagreeing → `DIVERGENT`, `source_equivocation` (and no spurious cross-source
+divergence for that field); two spellings of one URI (RFC 3986) → none; a single
+or identical field value → none; one verified value beside one `None` → none;
+fewer than two decisive claims → `INSUFFICIENT`; `error`/unreachable source →
+excluded (no `omission`); soft-404 → `absent`; one id → multiple simultaneous
+findings where applicable. A sealed Corroboration Record (§9) MUST round-trip:
+recomputed `record_id` and `signature` verify. The corpus is view-agnostic and
+reused by every layer.
 
-## 11. Deferred
+## 12. Deferred
 
 - A quorum reducer over findings (*k*-of-*n* agreement) for >2 sources.
 - Durable per-source divergence history (source reputation).

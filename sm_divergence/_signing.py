@@ -12,7 +12,9 @@ network, no external trust.
 from __future__ import annotations
 
 import base64
+import hashlib
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 try:
@@ -40,6 +42,19 @@ def canonical(obj: Mapping[str, Any]) -> bytes:
     _require()
     result: bytes = jcs.canonicalize(obj)
     return result
+
+
+def corr_digest(obj: Mapping[str, Any]) -> str:
+    """CORR-DIGEST — ``lowercase-hex(SHA-256(JCS(obj)))`` (draft §2). The content
+    address of a value; a verifier recomputes it. Values in digest-bearing fields
+    MUST NOT be JSON floats, so callers stamp integer timestamps/windows."""
+    return hashlib.sha256(canonical(obj)).hexdigest()
+
+
+def rfc3339(observed_at: float) -> str:
+    """An epoch-seconds instant as RFC 3339 UTC with a ``Z`` suffix, truncated to
+    whole seconds (no float appears in the record)."""
+    return datetime.fromtimestamp(int(observed_at), tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def pubkey_from_did_key(did: str) -> bytes | None:

@@ -9,3 +9,4 @@ ci-local:
 	uv run python examples/registry_divergence.py
 	uv run python examples/identity_key_divergence.py
 	uv run python examples/signed_self_description.py
+	uv run python examples/corroboration_record.py

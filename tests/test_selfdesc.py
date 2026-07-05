@@ -1,4 +1,4 @@
-"""Signed portable-identity self-description — verification, freshness, and the
+"""Signed portable-identity self-description (draft §8) — verification, and the
 payoff: correspondence proven by the agent's signature drives the resolvers.
 """
 
@@ -18,9 +18,8 @@ from sm_divergence import (
     verify_self_description,
 )
 
-NOW = 1_751_600_000.0
 ALIASES = {"nest": "acme", "nanda": "urn:ai:domain:acme.org:agent:acme", "web": "did:web:acme.org"}
-SERVICES = {"discovery": "https://acme.example/agents/acme", "capability": "https://acme.example/agentfacts.json"}
+ENDPOINTS = ["https://acme.example/agents/acme", "https://acme.example/agentfacts.json"]
 
 
 def _raw_private() -> bytes:
@@ -33,28 +32,29 @@ def signer() -> bytes:
 
 
 def _bundle(private_key: bytes, **kw: Any) -> dict[str, Any]:
-    kw.setdefault("now", NOW)
     kw.setdefault("seq", 1)
-    return build_self_description(ALIASES, SERVICES, private_key, **kw)
+    return build_self_description(ALIASES, ENDPOINTS, private_key, **kw)
 
 
 # ── build / verify roundtrip ─────────────────────────────────
 
 
 def test_build_verify_roundtrip(signer: bytes) -> None:
-    sd = verify_self_description(_bundle(signer), now=NOW + 60)
+    sd = verify_self_description(_bundle(signer))
     assert isinstance(sd, SelfDescription)
     assert sd.alias("nanda") == "urn:ai:domain:acme.org:agent:acme"
     assert sd.alias("web") == "did:web:acme.org"
-    assert sd.service("discovery") == "https://acme.example/agents/acme"
+    assert sd.endpoints == tuple(ENDPOINTS)
     assert sd.alias("unknown") is None
 
 
-def test_did_is_derived_from_the_signing_key(signer: bytes) -> None:
+def test_bundle_matches_paper_schema(signer: bytes) -> None:
     bundle = _bundle(signer)
-    assert bundle["descriptor"]["did"].startswith("did:key:z")
+    assert bundle["version"] == "self-description/0.1"
+    assert bundle["subject"].startswith("did:key:z")
+    assert set(bundle) == {"version", "subject", "seq", "aliases", "endpoints", "signature"}
     # verifies against the key inside it, offline
-    assert verify_self_description(bundle, now=NOW) is not None
+    assert verify_self_description(bundle) is not None
 
 
 # ── adversarial: signature binds every field ─────────────────
@@ -62,63 +62,65 @@ def test_did_is_derived_from_the_signing_key(signer: bytes) -> None:
 
 def test_tampered_alias_breaks_signature(signer: bytes) -> None:
     bundle = _bundle(signer)
-    bundle["descriptor"]["aliases"]["web"] = "did:web:attacker.example"
-    assert verify_self_description(bundle, now=NOW) is None
+    bundle["aliases"]["web"] = "did:web:attacker.example"
+    assert verify_self_description(bundle) is None
 
 
-def test_tampered_service_breaks_signature(signer: bytes) -> None:
+def test_tampered_endpoint_breaks_signature(signer: bytes) -> None:
     bundle = _bundle(signer)
-    bundle["descriptor"]["services"]["discovery"] = "https://attacker.example"
-    assert verify_self_description(bundle, now=NOW) is None
+    bundle["endpoints"][0] = "https://attacker.example"
+    assert verify_self_description(bundle) is None
 
 
-def test_tampered_expiry_breaks_signature(signer: bytes) -> None:
-    bundle = _bundle(signer, ttl_s=300)
-    bundle["descriptor"]["expires_at"] += 999_999
-    assert verify_self_description(bundle, now=NOW) is None
-
-
-def test_swapped_did_breaks_signature(signer: bytes) -> None:
+def test_swapped_subject_breaks_signature(signer: bytes) -> None:
     bundle = _bundle(signer)
-    other = build_self_description(ALIASES, SERVICES, _raw_private(), seq=1, now=NOW)
-    bundle["descriptor"]["did"] = other["descriptor"]["did"]
-    assert verify_self_description(bundle, now=NOW) is None
+    other = build_self_description(ALIASES, ENDPOINTS, _raw_private(), seq=1)
+    bundle["subject"] = other["subject"]
+    assert verify_self_description(bundle) is None
+
+
+def test_wrong_version_rejected(signer: bytes) -> None:
+    bundle = _bundle(signer)
+    bundle["version"] = "self-description/9.9"
+    assert verify_self_description(bundle) is None
 
 
 def test_seq_is_carried_and_signed(signer: bytes) -> None:
-    sd = verify_self_description(_bundle(signer, seq=7), now=NOW)
+    sd = verify_self_description(_bundle(signer, seq=7))
     assert sd is not None and sd.seq == 7
 
 
 def test_tampered_seq_breaks_signature(signer: bytes) -> None:
     bundle = _bundle(signer, seq=3)
-    bundle["descriptor"]["seq"] = 99  # replay as a newer seq
-    assert verify_self_description(bundle, now=NOW) is None
+    bundle["seq"] = 99  # replay as a newer seq
+    assert verify_self_description(bundle) is None
 
 
 def test_non_int_seq_rejected(signer: bytes) -> None:
     bundle = _bundle(signer, seq=1)
-    bundle["descriptor"]["seq"] = "1"
-    assert verify_self_description(bundle, now=NOW) is None
-
-
-def test_expired_is_rejected(signer: bytes) -> None:
-    assert verify_self_description(_bundle(signer, ttl_s=300), now=NOW + 301) is None
+    bundle["seq"] = "1"
+    assert verify_self_description(bundle) is None
 
 
 @pytest.mark.parametrize(
     "bundle",
-    [None, "str", {}, {"descriptor": {}, "sig": "x"}, {"descriptor": {"did": "did:key:z"}, "sig": ""}],
+    [None, "str", {}, {"subject": "did:key:z", "signature": ""}, {"version": "self-description/0.1", "signature": "x"}],
 )
 def test_malformed_returns_none(bundle: Any) -> None:
-    assert verify_self_description(bundle, now=NOW) is None
+    assert verify_self_description(bundle) is None
 
 
 def test_non_string_alias_values_rejected(signer: bytes) -> None:
     bundle = _bundle(signer)
-    bundle["descriptor"]["aliases"]["bad"] = 123  # not a str
+    bundle["aliases"]["bad"] = 123  # not a str
     # signature no longer matches AND the shape is invalid — either way, None
-    assert verify_self_description(bundle, now=NOW) is None
+    assert verify_self_description(bundle) is None
+
+
+def test_non_string_endpoint_rejected(signer: bytes) -> None:
+    bundle = _bundle(signer)
+    bundle["endpoints"].append(123)
+    assert verify_self_description(bundle) is None
 
 
 # ── the payoff: signed correspondence drives resolvers ───────
@@ -127,7 +129,7 @@ def test_non_string_alias_values_rejected(signer: bytes) -> None:
 def test_signed_alias_for_uses_verified_aliases(signer: bytes) -> None:
     """A did_for/locator_for built from verified self-descriptions returns the
     agent's SIGNED name per namespace — correspondence proven, not configured."""
-    sds = verified_descriptions({"acme": _bundle(signer)}, now=NOW)
+    sds = verified_descriptions({"acme": _bundle(signer)})
     web_did_for = signed_alias_for(sds, "web")
     nanda_locator_for = signed_alias_for(sds, "nanda")
     assert web_did_for("acme") == "did:web:acme.org"
@@ -137,12 +139,12 @@ def test_signed_alias_for_uses_verified_aliases(signer: bytes) -> None:
 def test_signed_alias_for_falls_back_when_unverified() -> None:
     """No verified description (or a garbage bundle) → fall back to the id itself,
     so an unsigned/forged self-description cannot silently redirect a resolver."""
-    sds = verified_descriptions({"acme": {"descriptor": {}, "sig": "forged"}}, now=NOW)
+    sds = verified_descriptions({"acme": {"subject": "did:key:z", "signature": "forged"}})
     assert sds == {}
     did_for = signed_alias_for(sds, "web")
     assert did_for("acme") == "acme"  # fallback = identity
 
 
 def test_signed_alias_for_falls_back_for_missing_namespace(signer: bytes) -> None:
-    sds = verified_descriptions({"acme": _bundle(signer)}, now=NOW)
+    sds = verified_descriptions({"acme": _bundle(signer)})
     assert signed_alias_for(sds, "no-such-namespace")("acme") == "acme"

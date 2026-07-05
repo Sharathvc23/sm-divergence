@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from sm_resolver import Corroborator, Finding, OnFinding, Resolver
+from sm_resolver import Corroborator, OnFinding, Resolver, SweepResult
 
 from .discovery import DEFAULT_PATH, HttpByIdResolver, RecordAdapter, RecordView, default_adapter
 
@@ -36,12 +36,13 @@ class DivergenceDetector(Corroborator[RecordView]):
         path: str = DEFAULT_PATH,
         on_finding: OnFinding | None = None,
         timeout: float = 10.0,
+        staleness_window_s: float = 0.0,
     ) -> None:
         resolvers: list[Resolver[RecordView]] = [
             HttpByIdResolver(r, adapter=adapter, path=path, timeout=timeout) if isinstance(r, str) else r
             for r in registries
         ]
-        super().__init__(resolvers, on_finding=on_finding)
+        super().__init__(resolvers, on_finding=on_finding, staleness_window_s=staleness_window_s)
 
     @property
     def registries(self) -> list[str]:
@@ -56,6 +57,7 @@ async def check_once(
     adapter: RecordAdapter = default_adapter,
     path: str = DEFAULT_PATH,
     timeout: float = 10.0,
-) -> list[Finding]:
-    """One-shot convenience: build a detector and run a single check."""
+) -> list[SweepResult[RecordView]]:
+    """One-shot convenience: build a detector and run a single check, returning
+    one ``SweepResult`` per watched id (verdict + claims + findings)."""
     return await DivergenceDetector(registries, adapter=adapter, path=path, timeout=timeout).check(watch_ids)

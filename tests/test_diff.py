@@ -24,7 +24,8 @@ def test_endpoint_divergence() -> None:
     findings = diff_views(views, ["x"])
     assert [f.kind for f in findings] == ["endpoint"]
     assert findings[0].detail["field"] == "endpoint"
-    assert findings[0].detail["values"] == {A: "https://real.example", B: "https://attacker.example"}
+    # values are RFC 3986-normalized (empty path → "/") before comparison
+    assert findings[0].detail["values"] == {A: "https://real.example/", B: "https://attacker.example/"}
 
 
 def test_omission() -> None:

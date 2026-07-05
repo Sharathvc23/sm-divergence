@@ -20,8 +20,7 @@ from sm_divergence import (
 )
 from sm_divergence.identity.selfdesc import SelfDescription
 
-NOW = 1_751_600_000.0
-SERVICES = {"discovery": "https://acme.example/agents/acme"}
+ENDPOINTS = ["https://acme.example/agents/acme"]
 
 
 def _priv() -> bytes:
@@ -29,8 +28,8 @@ def _priv() -> bytes:
 
 
 def _sd(private_key: bytes, *, seq: int, aliases: dict[str, str]) -> SelfDescription:
-    bundle = build_self_description(aliases, SERVICES, private_key, seq=seq, now=NOW)
-    sd = verify_self_description(bundle, now=NOW)
+    bundle = build_self_description(aliases, ENDPOINTS, private_key, seq=seq)
+    sd = verify_self_description(bundle)
     assert sd is not None
     return sd
 
@@ -101,10 +100,10 @@ def _transport(handler: Any) -> httpx.MockTransport:
 @pytest.mark.asyncio
 async def test_http_resolver_present_absent_error() -> None:
     signer = _priv()
-    bundle = build_self_description({"web": "did:web:acme.org"}, SERVICES, signer, seq=2, now=NOW)
+    bundle = build_self_description({"web": "did:web:acme.org"}, ENDPOINTS, signer, seq=2)
 
     present = HttpDescriptionResolver(
-        "https://a.example", now=NOW, transport=_transport(lambda r: httpx.Response(200, json=bundle))
+        "https://a.example", transport=_transport(lambda r: httpx.Response(200, json=bundle))
     )
     status, sd = await present.resolve("acme")
     assert status == "present" and sd is not None and sd.seq == 2
@@ -114,8 +113,7 @@ async def test_http_resolver_present_absent_error() -> None:
 
     bad = HttpDescriptionResolver(
         "https://a.example",
-        now=NOW,
-        transport=_transport(lambda r: httpx.Response(200, json={"descriptor": {}, "sig": "x"})),
+        transport=_transport(lambda r: httpx.Response(200, json={"subject": "did:key:z", "signature": "x"})),
     )
     assert await bad.resolve("acme") == ("error", None)  # served but unverifiable → no claim
 
@@ -123,14 +121,14 @@ async def test_http_resolver_present_absent_error() -> None:
 @pytest.mark.asyncio
 async def test_corroborate_descriptions_end_to_end() -> None:
     signer = _priv()
-    real = build_self_description({"web": "did:web:acme.org"}, SERVICES, signer, seq=5, now=NOW)
-    forged = build_self_description({"web": "did:web:attacker.example"}, SERVICES, signer, seq=5, now=NOW)
+    real = build_self_description({"web": "did:web:acme.org"}, ENDPOINTS, signer, seq=5)
+    forged = build_self_description({"web": "did:web:attacker.example"}, ENDPOINTS, signer, seq=5)
 
     a = HttpDescriptionResolver(
-        "https://a.example", now=NOW, transport=_transport(lambda r: httpx.Response(200, json=real)), label="a"
+        "https://a.example", transport=_transport(lambda r: httpx.Response(200, json=real)), label="a"
     )
     b = HttpDescriptionResolver(
-        "https://b.example", now=NOW, transport=_transport(lambda r: httpx.Response(200, json=forged)), label="b"
+        "https://b.example", transport=_transport(lambda r: httpx.Response(200, json=forged)), label="b"
     )
 
     result = await corroborate_descriptions([a, b], ["acme"])

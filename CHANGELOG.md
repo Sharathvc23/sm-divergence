@@ -4,6 +4,42 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — 2026-07-04
+
+The signed Corroboration Record, the portable agent self-description, and a
+vantage-aware diff, on [`sm-resolver`](https://pypi.org/project/sm-resolver/)
+≥ 0.2 (the vantage-aware claim model, `SweepResult`, confirmation). With the
+`sm-resolver` kernel, this package is the reference implementation of the IETF
+draft *Multi-Source Corroboration for AI Agent Discovery*
+(`draft-chandra-agent-registry-corroboration-00`).
+
+### Added
+- **Signed Corroboration Record** (`sm_divergence.record`, draft §9) —
+  `build_corroboration_record` / `sign_sweep` seal a `SweepResult` into a
+  content-addressed, signed record (`record_id` = CORR-DIGEST = SHA-256 of the
+  JCS body; `sweeper` `did:key` + Ed25519 signature). One record per subject,
+  **whatever the verdict** — the `AGREE` record is the positive attestation that
+  the sweep ran. `verify_corroboration_record` recomputes the digest and checks
+  the signature offline, with optional `trusted_sweeper` pinning.
+- **RFC 3986 endpoint normalization** (draft §5) — `normalize_endpoint` (applied
+  in `RecordView.comparable()`): lowercase scheme/host, drop default ports,
+  empty path → `/`, so two spellings of one endpoint are not a false divergence.
+- `_signing.corr_digest` and `_signing.rfc3339` helpers.
+- `python -m sm_divergence check --sweeper-key PATH` emits signed records.
+
+### Changed
+- **BREAKING:** the self-description bundle is now a flat
+  `{version: "self-description/0.1", subject, seq, aliases, endpoints,
+  signature}` object. `did` → `subject`, the `services{}` map → an
+  `endpoints[]` array, and `issued_at`/`expires_at` are **removed** (freshness is
+  supersession by `seq`, so a verifier needs no clock). `build_self_description`
+  takes `endpoints` (a list) and drops `now`/`ttl_s`; `verify_self_description`
+  drops `now`. `SelfDescription.service()` is removed; `.endpoints` is added.
+- **BREAKING:** `check_once` and `DivergenceDetector.check` return
+  `list[SweepResult]` (verdict + claims + findings), not `list[Finding]` — the
+  kernel change surfaced here. `DivergenceDetector` accepts `staleness_window_s`.
+- The CLI reports a verdict per subject and exits `2` only on `DIVERGENT`.
+
 ## [0.7.1] — 2026-07-04
 
 Initial public release — catch a cheating registry (or any source agents resolve

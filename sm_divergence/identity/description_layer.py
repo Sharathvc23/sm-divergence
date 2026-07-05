@@ -96,7 +96,6 @@ class HttpDescriptionResolver:
         *,
         path: str = "/.well-known/agent-self-description.json",
         locator_for: DidFor = identity_did,
-        now: float | None = None,
         timeout: float = 10.0,
         transport: httpx.AsyncBaseTransport | None = None,
         label: str | None = None,
@@ -104,7 +103,6 @@ class HttpDescriptionResolver:
         self.base_url = base_url.rstrip("/")
         self.path = path
         self.locator_for = locator_for
-        self.now = now
         self.timeout = timeout
         self._transport = transport
         self._label = label or self.base_url
@@ -128,9 +126,9 @@ class HttpDescriptionResolver:
             bundle = resp.json()
         except Exception:
             return "error", None
-        sd = verify_self_description(bundle, now=self.now)
+        sd = verify_self_description(bundle)
         if sd is None:
-            return "error", None  # served but unverifiable / expired — no claim
+            return "error", None  # served but unverifiable — no claim
         return "present", sd
 
 

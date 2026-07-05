@@ -24,6 +24,14 @@ this library does — enough to turn a silently cheating source into a loudly
 diverging one. See the [whitepaper](WHITEPAPER.md) for the argument and the
 [spec](SPEC.md) for the normative procedure.
 
+This is the **reference implementation** of the IETF draft *Multi-Source
+Corroboration for AI Agent Discovery*
+(`draft-chandra-agent-registry-corroboration-00`): the
+[`sm-resolver`](https://pypi.org/project/sm-resolver/) kernel is the claim model
+and diff, and this package is the signing layer — the agent self-description
+(§8) and the signed [Corroboration Record](#the-corroboration-record) (§9) — plus
+the reference discovery and identity layers.
+
 > **Not a transparency log.** Corroboration catches a source that disagrees with
 > its peers; it does not stop a *single* source lying *consistently* to a
 > first-time caller. That last mile is transparency-log territory (WHITEPAPER §7).
@@ -52,16 +60,24 @@ pip install "sm-divergence[attestation]"  # + verified-DID checks (Ed25519/did:k
 import asyncio
 from sm_divergence import check_once
 
-findings = asyncio.run(check_once(
+results = asyncio.run(check_once(
     ["https://registry-a.example", "https://registry-b.example"],
     ["agent-1", "agent-2"],
 ))
-for f in findings:
-    print(f.kind, f.agent_id, f.detail)
-    # endpoint agent-1 {'field': 'endpoint',
-    #                   'values': {'https://registry-a.example': 'https://real.example',
-    #                              'https://registry-b.example': 'https://attacker.example'}}
+for r in results:
+    print(r.agent_id, r.verdict)          # agent-1 DIVERGENT   (AGREE / DIVERGENT / INSUFFICIENT)
+    for f in r.findings:
+        print(" ", f.kind, f.confirmation, f.detail)
+        # endpoint suspected {'field': 'endpoint',
+        #                     'values': {'https://registry-a.example': 'https://real.example/',
+        #                                'https://registry-b.example': 'https://attacker.example/'}}
 ```
+
+Each `check` returns one `SweepResult` per subject — a **verdict** (`AGREE`,
+`DIVERGENT`, or `INSUFFICIENT` when fewer than two sources answered decisively),
+the claims, and the findings. A finding is `suspected` when first seen and
+`confirmed` once re-observed past the detector's `staleness_window_s` (so
+legitimate propagation lag isn't mistaken for tampering).
 
 Long-running? Keep a detector and route new findings to your alert sink — it
 deduplicates, so a persisting divergence fires your callback once:
@@ -72,8 +88,24 @@ from sm_divergence import DivergenceDetector
 detector = DivergenceDetector(
     ["https://registry-a.example", "https://registry-b.example"],
     on_finding=lambda f: alert(f.kind, f.agent_id, f.detail),
+    staleness_window_s=300,
 )
 await detector.check(watch_ids=my_agent_ids)   # call each poll cycle
+```
+
+### The Corroboration Record
+
+Every sweep can be sealed into a signed, content-addressed **Corroboration
+Record** (draft §9) — the auditable proof that the checks ran, emitted for every
+subject *whatever the verdict* (the `AGREE` record is the positive attestation,
+not just the `DIVERGENT` ones):
+
+```python
+from sm_divergence import sign_sweep, verify_corroboration_record
+
+records = sign_sweep(results, sweeper_private_key=my_ed25519_key)  # needs [attestation]
+# record_id = SHA-256(JCS(body)); signed by the sweeper's did:key
+assert all(verify_corroboration_record(r) for r in records)        # verifies offline
 ```
 
 ## CLI
@@ -103,6 +135,7 @@ for omission), so a consumer parses findings the same way at every layer.
 | `endpoint` | Discovery sources disagree on an agent's endpoint. |
 | `did` | Discovery sources with a **verified** attestation disagree on the key. One valid record + one forged one is *not* a disagreement — only proven DIDs count. |
 | `key` | Identity sources (DID methods) disagree on the agent's verification key. |
+| `source_equivocation` | One source, observed from several **vantages**, disagrees with *itself* on a field — equivocation by that source, distinct from disagreement between sources. |
 | `agent_equivocation` | The agent's *own key* signed two different self-descriptions at the same `seq` — key compromise or a lying agent (the one finding about the agent, not a source). |
 | `stale_description` | A source serves a self-description behind the highest `seq` (replay / lag). |
 
@@ -114,12 +147,13 @@ the kernel is untouched.
 
 ```
 sm-resolver  (dependency)  the source-agnostic kernel — Resolver[T], the View
-                           contract, diff_views, Corroborator, Finding
+                           contract, Claim, diff_claims, Corroborator, SweepResult
 sm_divergence/
   discovery/   registry-integrity layer — RecordView + HttpByIdResolver (NEST)
                + NandaIndexV2Resolver
   identity/    key-consistency layer — DidView + DidKeyResolver / DidWebResolver
                / UniversalResolverResolver + signed self-description
+  record.py    the signed Corroboration Record (draft §9)
 ```
 
 The kernel now lives in its own package,
@@ -186,10 +220,11 @@ from sm_divergence import (
     signed_alias_for, DidWebResolver, AliasClosureResolver, binds_by_key,
 )
 
-# the agent signs (bumping seq on every re-issue), with its did:key's private key:
+# the agent signs (bumping seq on every re-issue), with its did:key's private key.
+# The bundle is the draft §8 shape: {version, subject, seq, aliases, endpoints, signature}.
 bundle = build_self_description(
     aliases={"web": "did:web:acme.org", "nanda": "urn:ai:…:acme"},
-    services={"discovery": "https://acme.example/agents/acme"},
+    endpoints=["https://acme.example/agents/acme"],
     private_key=agent_ed25519_private_bytes, seq=5,
 )
 
@@ -204,7 +239,7 @@ sds = {"acme": canonical} if canonical else {}
 # drive resolvers from the PROVEN aliases, with closure so a claimed alias that
 # doesn't bind back to the did:key contributes no claim (never a false divergence):
 web = DidWebResolver(did_for=signed_alias_for(sds, "web"))
-web = AliasClosureResolver(web, lambda a: sds[a].did if a in sds else None, binds_by_key)
+web = AliasClosureResolver(web, lambda a: sds[a].subject if a in sds else None, binds_by_key)
 ```
 
 > The kernel lives in [`sm-resolver`](https://github.com/Sharathvc23/sm-resolver);

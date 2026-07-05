@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from _sweep import kinds
 
 from sm_divergence import (
     Corroborator,
@@ -125,9 +126,10 @@ async def test_did_web_key_diverges_from_did_key_root() -> None:
         transport=_transport(lambda req: httpx.Response(200, json=_did_doc(KEY_B))),
         label="did:web",
     )
-    findings = await Corroborator([did_key, did_web]).check([agent])
-    assert [f.kind for f in findings] == ["key"]
-    assert findings[0].detail == {"field": "key", "values": {"did:key": KEY_A, "did:web": KEY_B}}
+    results = await Corroborator([did_key, did_web]).check([agent])
+    found = [f for r in results for f in r.findings]
+    assert [f.kind for f in found] == ["key"]
+    assert found[0].detail == {"field": "key", "values": {"did:key": KEY_A, "did:web": KEY_B}}
 
 
 @pytest.mark.asyncio
@@ -139,4 +141,6 @@ async def test_matching_keys_no_divergence() -> None:
         transport=_transport(lambda req: httpx.Response(200, json=_did_doc(KEY_A))),
         label="did:web",
     )
-    assert await Corroborator([did_key, did_web]).check([agent]) == []
+    results = await Corroborator([did_key, did_web]).check([agent])
+    assert kinds(results) == []
+    assert next(r.verdict for r in results if r.agent_id == agent) == "AGREE"

@@ -104,5 +104,8 @@ async def test_closure_prevents_manufactured_divergence() -> None:
     attacker = AliasClosureResolver(
         _CannedResolver("src-c", "present", attacker_view), _expect, binds_by_did, label="src-c"
     )
-    findings = await Corroborator([honest_a, honest_b, attacker]).check(["acme"])
-    assert findings == []  # closure dropped src-c's non-binding claim; no false divergence
+    results = await Corroborator([honest_a, honest_b, attacker]).check(["acme"])
+    found = [f for r in results for f in r.findings]
+    assert found == []  # closure dropped src-c's non-binding claim; no false divergence
+    # two honest present claims agree, src-c became an error (no claim) → AGREE
+    assert next(r.verdict for r in results if r.agent_id == "acme") == "AGREE"
