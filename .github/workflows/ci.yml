@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  ci-local:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Pin Python
+        run: uv python pin ${{ matrix.python-version }}
+      # sm-resolver (the kernel) is a PRIVATE git dependency; the default
+      # GITHUB_TOKEN cannot clone another private repo. Provide a fine-grained
+      # PAT with read access to Sharathvc23/sm-resolver as the SM_RESOLVER_PAT
+      # secret. (If sm-resolver is made public, this step is a harmless no-op.)
+      - name: Auth for the private sm-resolver dependency
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.SM_RESOLVER_PAT }}@github.com/Sharathvc23/".insteadOf "https://github.com/Sharathvc23/"
+      # The same gate as `make ci-local` — green locally == green here.
+      - run: uv sync --extra dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy sm_divergence
+      - run: uv run pytest -v
+      - name: Examples run
+        run: |
+          uv run python examples/registry_divergence.py
+          uv run python examples/identity_key_divergence.py
+          uv run python examples/signed_self_description.py
