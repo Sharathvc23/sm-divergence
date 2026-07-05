@@ -513,7 +513,7 @@ wheels = [
 
 [[package]]
 name = "sm-divergence"
-version = "0.6.0"
+version = "0.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -549,14 +549,18 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
-    { name = "sm-resolver", git = "https://github.com/Sharathvc23/sm-resolver.git?rev=main" },
+    { name = "sm-resolver", specifier = ">=0.1" },
 ]
 provides-extras = ["attestation", "dev"]
 
 [[package]]
 name = "sm-resolver"
 version = "0.1.0"
-source = { git = "https://github.com/Sharathvc23/sm-resolver.git?rev=main#b1ecbf28f1d7215f35246a6e4eb070b8a724c70b" }
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c6/37/39891a611a0872fa191e80dad49ff68b1ee6e2c92bfd4e16c61981a13232/sm_resolver-0.1.0.tar.gz", hash = "sha256:2517272794fd0b433cef92cfd71e05976c4f9778b34eee7706e53c8858e8dff7", size = 36567, upload-time = "2026-07-05T01:30:55.551Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0d/cd/126190e94f687b1707260ebf333c66ee22ada960887812bff2084ec799b8/sm_resolver-0.1.0-py3-none-any.whl", hash = "sha256:d091079ff0e1b1f75fbc282d61909942ddc92ce93e260b4a7b10dd449b54e90d", size = 9738, upload-time = "2026-07-05T01:30:54.395Z" },
+]
 
 [[package]]
 name = "typing-extensions"

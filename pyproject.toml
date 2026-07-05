@@ -13,7 +13,7 @@ authors = [{ name = "Sharath (Stellarminds)" }]
 keywords = ["ai-agents", "nanda", "registry", "discovery", "federation", "accountability"]
 dependencies = [
     "httpx>=0.24",
-    "sm-resolver @ git+https://github.com/Sharathvc23/sm-resolver.git@main",
+    "sm-resolver>=0.1",
 ]
 
 [project.optional-dependencies]
@@ -37,10 +37,6 @@ sm-divergence = "sm_divergence.cli:main"
 Homepage = "https://github.com/Sharathvc23/sm-divergence"
 Spec = "https://github.com/Sharathvc23/sm-divergence/blob/main/SPEC.md"
 Whitepaper = "https://github.com/Sharathvc23/sm-divergence/blob/main/WHITEPAPER.md"
-
-[tool.hatch.metadata]
-# Allow the sm-resolver git-URL dependency (not yet on PyPI).
-allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["sm_divergence"]

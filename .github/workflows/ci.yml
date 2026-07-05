@@ -16,14 +16,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Pin Python
         run: uv python pin ${{ matrix.python-version }}
-      # sm-resolver (the kernel) is a PRIVATE git dependency; the default
-      # GITHUB_TOKEN cannot clone another private repo. Provide a fine-grained
-      # PAT with read access to Sharathvc23/sm-resolver as the SM_RESOLVER_PAT
-      # secret. (If sm-resolver is made public, this step is a harmless no-op.)
-      - name: Auth for the private sm-resolver dependency
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.SM_RESOLVER_PAT }}@github.com/Sharathvc23/".insteadOf "https://github.com/Sharathvc23/"
       # The same gate as `make ci-local` — green locally == green here.
+      # sm-resolver (the kernel) resolves from PyPI.
       - run: uv sync --extra dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .

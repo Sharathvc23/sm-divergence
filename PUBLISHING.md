@@ -4,25 +4,8 @@
 tell PyPI once that this repo's `release.yml` workflow may publish; after that,
 pushing a version tag builds and uploads automatically.
 
-## Prerequisite — the sm-resolver dependency
-
-`sm-divergence` depends on [`sm-resolver`](https://github.com/Sharathvc23/sm-resolver)
-(the kernel). Today `pyproject.toml` pins it as a **git URL**:
-
-```toml
-"sm-resolver @ git+https://github.com/Sharathvc23/sm-resolver.git@main"
-```
-
-PyPI **rejects** packages with direct-reference (URL/git) dependencies, so before
-the first release you MUST:
-
-1. Publish `sm-resolver` to PyPI (see its `PUBLISHING.md`).
-2. In `sm-divergence`'s `pyproject.toml`, replace the git URL with a normal
-   version spec, e.g. `"sm-resolver>=0.1"`, and remove the
-   `[tool.hatch.metadata] allow-direct-references = true` line.
-
-(The git URL is fine for development and this repo's CI; it just can't ship to
-PyPI.)
+`sm-divergence` depends on [`sm-resolver`](https://pypi.org/project/sm-resolver/)
+(the kernel) via a normal PyPI version spec (`sm-resolver>=0.1`).
 
 ## One-time setup (≈5 minutes — this is the part only you can do)
 
