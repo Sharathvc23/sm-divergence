@@ -6,7 +6,13 @@ with no machinery of its own. The NANDA Index is a *pointer* layer, so resolving
 one agent is two hops:
 
     1. GET {index_url}/api/v1/resolve?locator={locator}
-         → { "registry_url": "...", "identifier": "..." }
+         → { "locator": "...", "identifier": "...",
+             "index_record": { "registry_url": "...", ... } }
+       ``registry_url`` lives nested inside ``index_record`` — never at the
+       top level — per the server's own ``ResolveResponse``/``IndexRecord``
+       types. It is also nullable (e.g. DNS-AID orgs have no registry to
+       point at); this resolver's hop2 cannot follow a null registry_url,
+       so that case is reported as ``"error"``, not silently skipped.
     2. GET {registry_url}{record_path with identifier}
          → the agent record (e.g. an ai-catalog CatalogEntry)
 
@@ -88,8 +94,11 @@ class NandaIndexV2Resolver:
             return "error", None
         if looks_absent(doc):
             return "absent", None
-        registry_url = doc.get("registry_url")
+        index_record = doc.get("index_record")
         identifier = doc.get("identifier")
+        if not isinstance(index_record, dict):
+            return "error", None
+        registry_url = index_record.get("registry_url")
         if not isinstance(registry_url, str) or not registry_url:
             return "error", None
         if not isinstance(identifier, str) or not identifier:

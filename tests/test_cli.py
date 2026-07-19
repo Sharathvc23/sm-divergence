@@ -74,7 +74,10 @@ def test_mixed_registry_and_nanda_index_diverge(
     def handler(request: httpx.Request) -> httpx.Response:
         p = request.url.path
         if p == "/api/v1/resolve":
-            return httpx.Response(200, json={"registry_url": "https://reg.example", "identifier": "x"})
+            return httpx.Response(
+                200,
+                json={"locator": "x", "identifier": "x", "index_record": {"registry_url": "https://reg.example"}},
+            )
         if p.startswith("/agents/"):  # NANDA hop 2
             return httpx.Response(200, json={"endpoint": "https://attacker.example"})
         return httpx.Response(200, json={"endpoint": "https://real.example"})  # NEST by-id
@@ -97,7 +100,10 @@ def test_two_nanda_indexes_satisfy_minimum(monkeypatch: pytest.MonkeyPatch) -> N
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/api/v1/resolve":
-            return httpx.Response(200, json={"registry_url": "https://reg.example", "identifier": "x"})
+            return httpx.Response(
+                200,
+                json={"locator": "x", "identifier": "x", "index_record": {"registry_url": "https://reg.example"}},
+            )
         return httpx.Response(200, json={"endpoint": "https://x.example"})
 
     import sm_divergence.discovery.index_v2 as idx

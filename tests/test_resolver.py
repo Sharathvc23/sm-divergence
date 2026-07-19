@@ -68,7 +68,10 @@ async def test_mixed_resolver_types_diverge() -> None:
 
     def nanda(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/api/v1/resolve":
-            return httpx.Response(200, json={"registry_url": "https://reg.example", "identifier": "x"})
+            return httpx.Response(
+                200,
+                json={"locator": "x", "identifier": "x", "index_record": {"registry_url": "https://reg.example"}},
+            )
         return httpx.Response(200, json={"endpoint": "https://attacker.example"})
 
     det = DivergenceDetector(
