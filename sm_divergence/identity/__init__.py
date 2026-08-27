@@ -19,6 +19,11 @@ from .description_layer import (
 )
 from .didkey import DidKeyResolver, key_from_did_key
 from .didweb import DidWebResolver, did_web_url, key_from_did_document
+from .operator import (
+    OperatorDescription,
+    build_operator_description,
+    verify_operator_description,
+)
 from .selfdesc import (
     SelfDescription,
     build_self_description,
@@ -38,7 +43,10 @@ __all__ = [
     "DidView",
     "DidWebResolver",
     "HttpDescriptionResolver",
+    "OperatorDescription",
     "SelfDescription",
+    "build_operator_description",
+    "verify_operator_description",
     "UniversalResolverResolver",
     "binds_by_key",
     "build_self_description",
