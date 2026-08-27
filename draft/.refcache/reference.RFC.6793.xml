@@ -1,0 +1,13 @@
+<reference anchor="RFC6793" target="https://www.rfc-editor.org/info/rfc6793">
+  <front>
+    <title>BGP Support for Four-Octet Autonomous System (AS) Number Space</title>
+    <author fullname="Q. Vohra" initials="Q." surname="Vohra"/>
+    <author fullname="E. Chen" initials="E." surname="Chen"/>
+    <date month="December" year="2012"/>
+    <abstract>
+      <t>The Autonomous System number is encoded as a two-octet entity in the base BGP specification. This document describes extensions to BGP to carry the Autonomous System numbers as four-octet entities. This document obsoletes RFC 4893 and updates RFC 4271. [STANDARDS-TRACK]</t>
+    </abstract>
+  </front>
+  <seriesInfo name="RFC" value="6793"/>
+  <seriesInfo name="DOI" value="10.17487/RFC6793"/>
+</reference>

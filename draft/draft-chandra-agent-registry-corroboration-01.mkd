@@ -30,6 +30,14 @@ normative:
   RFC3339:
   RFC3986:
   RFC8785:
+  RFC6793:
+  ISO3166:
+    title: "Codes for the representation of names of countries and their subdivisions — Part 1: Country codes"
+    author:
+      - org: International Organization for Standardization
+    date: 2020
+    seriesinfo:
+      ISO: 3166-1:2020
   DIDCORE:
     title: "Decentralized Identifiers (DIDs) v1.0"
     author:
@@ -87,28 +95,29 @@ informative:
 
 --- abstract
 
-AI agents are discovered and identified through independent sources — registries,
-name services, DID methods, catalogs. A single source can misrepresent an agent
-by omission (withholding a record it holds) or equivocation (serving different
-answers to different observers); no signature on a served artifact defends
-against either. This document specifies a corroboration procedure: how one
-source's claim about one agent, observed from one network vantage, is classified;
-how a claim is reduced to a comparable view; how claims are diffed into findings
-with deterministic attribution; how legitimate propagation delay is distinguished
-from persistent disagreement; and a signed Corroboration Record emitted on every
-sweep — agreement included — that other evidence formats can bind by digest. The
-procedure is source-, format-, and layer-agnostic, requires no cooperation from
-or modification of any source, and is verifiable from recorded bytes.
+AI agents are discovered and identified through independent sources, including
+registries, name services, DID methods, and catalogs. A single source can
+misrepresent an agent by omission, withholding a record it holds, or by
+equivocation, serving different answers to different observers. A signature on a
+served artifact does not, by itself, defend against either behavior. This
+document specifies a corroboration procedure that classifies one source's claim
+about one agent observed from one network vantage; reduces claims to comparable
+views; diffs claims into findings with deterministic attribution; distinguishes
+legitimate propagation delay from persistent disagreement; and emits a signed
+Corroboration Record for every sweep, including agreement, that other evidence
+formats can bind by digest. The procedure is source-, format-, and layer-agnostic;
+requires neither cooperation from nor modification of any source; and is
+verifiable from recorded bytes.
 
 --- middle
 
 # Introduction
 
-An artifact served by a discovery source can be self-certifying: signed such that any consumer verifies its content offline. Self-certification defeats tampering. It cannot, in principle, defeat two other misbehaviors available to any source: **omission** (a withheld artifact has no signature to check) and **equivocation** (two inconsistent artifacts served to different observers are each individually valid). Both require a structurally different defense — comparison of independent observations — with its own failure modes and its own evidence.
+An artifact served by a discovery source can be self-certifying: it can be signed such that a consumer verifies its content offline against an expected identity or key. Self-certification detects tampering with that artifact. It cannot, in principle, prevent two other behaviors available to any source: **omission**, in which a source withholds an artifact and there is therefore no artifact signature to verify; and **equivocation**, in which a source serves two inconsistent artifacts to different observers, each individually valid. Both require a structurally different defense, comparison of independent observations, with its own failure modes and evidence.
 
 This document specifies that comparison. It normatively fixes the decision procedure — claim classification (Section 4), the view contract (Section 5), the diff (Section 6), the confirmation discipline (Section 7), the self-description mechanism (Section 8), the Answer Scope (Section 9), and the Corroboration Record (Section 10) — and treats the byte-level fetch per source as an injectable implementation detail, because interoperability lives in the comparison and the record, not in any source's wire format.
 
-Not every difference between two sources is misbehavior. A source under a data-residency obligation serves a different endpoint by design, and a procedure that reports every such difference as equivocation fires on normal operation. Section 9 admits this without conceding anything: a source may declare, in advance and on an axis a third party can independently occupy, which fields it varies. A declaration so made **annotates** a finding and never withdraws it — the disagreement still stands and the verdict is unchanged — while a source that varies contrary to its own declaration earns a stronger finding than one that never declared at all.
+Not every difference between two sources is misbehavior. A source that is subject to a data-residency obligation may serve a different endpoint by design, and a procedure that reports every such difference as equivocation fires on normal operation. Section 9 admits this without conceding anything: a source may declare, in advance, an axis a third party can independently occupy along which it varies a field. A declaration so made **annotates** a finding and never withdraws it — the disagreement still stands and the verdict is unchanged — while a source that varies contrary to its own declaration earns a stronger finding than one that never declared at all.
 
 The procedure serves any layer at which a middleman answers questions about an agent: discovery (which endpoint), identity (which key), capability (which functions), and evidence (which records exist). Section 11 gives the two reference layer instantiations.
 
@@ -124,7 +133,7 @@ The procedure serves any layer at which a middleman answers questions about an a
 
 **Watch set:** The set of canonical agent identifiers a consumer corroborates.
 
-**Claim:** One source's answer about one agent as observed from one vantage at one instant, classified `present`, `absent`, or `error` (Section 4), carrying an `observed_at` timestamp.
+**Claim:** One source's answer about one agent as observed from one vantage during one sweep, classified `present`, `absent`, or `error` (Section 4). A claim's observation time is the sweep's `observed_at` (Section 7).
 
 **View:** The comparable reduction of a `present` claim: named string fields (Section 5).
 
@@ -138,17 +147,24 @@ The procedure serves any layer at which a middleman answers questions about an a
 
 **Self-Description:** An agent-signed bundle of sequence number, aliases, and service endpoints (Section 8).
 
-**CORR-DIGEST:** `lowercase-hex(SHA-256(JCS(v)))`, the SHA-256 of the RFC 8785 {{RFC8785}} JSON Canonicalization Scheme serialization of a value. All digests in this document use this construction. Values in digest-bearing fields MUST NOT be JSON floating-point numbers.
+**CORR-DIGEST:** The lowercase hexadecimal encoding of SHA-256 applied to the UTF-8 octets of the RFC 8785 {{RFC8785}} JSON Canonicalization Scheme serialization of a value. All digests in this document use this construction. Values in digest-bearing fields MUST NOT be JSON floating-point numbers.
 
 # Claim Model
 
-The unit of observation is the tuple **(source, vantage, agent, observed_at)**. Vantage MUST be preserved as a distinct axis and MUST NOT be encoded by treating each vantage as an independent source: intra-source disagreement across vantages attributes a different misbehavior (equivocation by that source) than inter-source disagreement, and collapsing the axes destroys the attribution (Section 6.3).
+The unit of observation is the tuple **(source, vantage, agent)** within one sweep, and the sweep carries the observation time (Section 7). Vantage MUST be preserved as a distinct axis and MUST NOT be encoded by treating each vantage as an independent source: intra-source disagreement across vantages attributes a different misbehavior (equivocation by that source) than inter-source disagreement, and collapsing the axes destroys the attribution (Section 6.3).
 
 A sweep with fewer than two `present`-or-`absent` claims for a subject has nothing to corroborate; its verdict is `INSUFFICIENT` (Section 10), and an implementation MUST NOT report agreement in that case.
 
 ## Vantage Identifiers
 
-A vantage identifier MUST be either null or a string of the form `class ":" value`, where `class` names the context dimension and `value` names the point on it. Both parts MUST match `[a-z0-9]([a-z0-9-]*[a-z0-9])?`. Identifiers are compared by exact octet equality; an implementation MUST NOT parse, order, or infer containment between values.
+A vantage identifier MUST be either null or a string of the form `class ":" value`, where `class` names the context dimension and `value` names a point on that dimension. Each component MUST match the regular expression `[a-z0-9](?:[a-z0-9-]*[a-z0-9])?`. Identifiers are compared by exact octet equality; an implementation MUST NOT parse, order, normalize, or infer containment relationships among identifier values.
+
+This document defines two initial occupiable classes. Both take their value space from an external registry, which is what makes shared denotation (below) a fact rather than an agreement between sweepers:
+
+- **`region`** — the value MUST be an ISO 3166-1 alpha-2 code {{ISO3166}}, lowercased. `region:de`, `region:us`, and the exceptionally reserved `region:eu` are well-formed.
+- **`asn`** — the value MUST be the string `as` followed by the decimal representation of a 32-bit Autonomous System Number {{RFC6793}}, with no leading zeros: `asn:as64500`.
+
+A class outside this set MUST NOT be used unless the deployments comparing observations have agreed on both its meaning and its value space; absent that agreement the requirements below cannot be met and the vantage MUST be null.
 
 Comparison scoped to a vantage (Section 6.2) is sound only if independently operated sweepers assign the same identifier to the same context. Accordingly:
 
@@ -165,15 +181,15 @@ For a source S, vantage V, and agent A, a resolver MUST classify the outcome as 
 
 - **`present`** — S served a claim for A, reduced to a view (Section 5).
 - **`absent`** — S positively asserts A is unknown. Each resolver defines the positive-absence predicate for its source type; for HTTP sources a `404` MUST be classified `absent`, and a `200` whose body positively signals not-found SHOULD be classified `absent`. Non-normative examples of the latter include `{"success": false}` bodies and error strings containing "not found".
-- **`error`** — any other outcome: connection failure, timeout, non-absence error status, unparseable body, or an answer the resolver cannot map to a view.
+- **`error`** — any other outcome: connection failure, timeout, non-absence error status, unparseable body, or an answer that the resolver cannot map to a view.
 
-A resolver MUST NOT raise; failures are `error` claims. An `error` claim MUST be excluded from the diff entirely. This rule is central: **a source that failed to answer has asserted nothing and MUST NOT be treated as claiming absence** — otherwise every transient fault becomes a false omission finding.
+A resolver MUST return an `error` claim rather than propagate an unclassified failure to the diff procedure. An `error` claim MUST be excluded from the diff entirely. This rule is central: **a source that failed to answer has asserted nothing and MUST NOT be treated as claiming absence** — otherwise every transient fault becomes a false omission finding.
 
 # The View Contract
 
 A `present` claim MUST be reduced to a **view**: a mapping of field names to string values or null. A null value MUST NOT participate in the diff: an unverifiable or missing field is not a disagreement.
 
-Fields whose values are compared as strings MUST be canonicalized by the layer before entering the view, such that two references to the same resource compare equal. For URI-valued fields (e.g., endpoints), implementations MUST apply syntax-based normalization per RFC 3986 {{RFC3986}} Section 6 (case of scheme and host, default ports, empty path) before comparison. For key-valued fields, the multibase `did:key` form is the comparison encoding.
+Fields whose values are compared as strings MUST be canonicalized by the layer before entering the view, such that two references to the same resource compare equal. For URI-valued fields (e.g., endpoints), implementations MUST apply syntax-based normalization per RFC 3986 {{RFC3986}} Section 6 (case of scheme and host, default ports, empty path) before comparison. For key-valued fields whose layer defines a `did:key` representation, the multibase `did:key` form is the comparison encoding.
 
 Where a field carries its own proof (a signed record's DID, a key), the resolver MUST populate it only from a successfully verified artifact whose subject binds to the outer agent identifier; on any verification failure the field is null. A verifier MUST NOT allow an unverified value to produce a divergence finding against a verified one (the no-laundering rule).
 
@@ -189,7 +205,10 @@ Emit an `omission` finding iff the agent is `present` on at least one source and
 
 For each field name appearing in any present view, collect the non-null values keyed by (source, vantage). Comparison is scoped to a **cohort**: the claims sharing one vantage identifier.
 
-A source contributing one value agreed across its vantages participates in every cohort. A source whose vantages disagree and to which an Answer Scope applies (Section 9.3) contributes its value *per vantage*, to the cohort naming that vantage. Cohort keys are drawn only from the vantages of such declared-varying sources; where a field has none, a single cohort spans every claim and the comparison is the unscoped one.
+1. A source contributes a single value to the comparison for a field only when all non-null values that source produced for that field agree across its observed vantages. Such a source participates in every cohort.
+2. If a source produced differing non-null values for a field across vantages and an applicable Answer Scope exists (Section 9.3), that source contributes its value separately to each cohort identified by the corresponding vantage.
+3. If a source produced differing non-null values for a field across vantages and no applicable Answer Scope exists, that source contributes no value to the cross-source comparison for that field (Section 6.3).
+4. Cohort keys are derived only from the vantages of sources for which an applicable Answer Scope authorizes per-vantage comparison for that field. If no such source exists, the diff MUST evaluate one unscoped cohort containing every eligible claim.
 
 Emit a finding of `kind` equal to the field name, once per cohort, iff more than one distinct value appears **across sources** within that cohort. Detail: `{field, values}` where `values` maps source labels to values.
 
@@ -201,12 +220,12 @@ Absent an applicable Answer Scope, a source under `source_equivocation` for a fi
 
 # Observation Time and Confirmation
 
-Sources propagate updates asynchronously; a legitimate change is served inconsistently for a bounded window. Every claim MUST carry `observed_at`. Every finding MUST carry a `confirmation` state:
+Sources propagate updates asynchronously; a legitimate change is served inconsistently for a bounded window. Every sweep MUST carry an `observed_at` timestamp, which is the observation time of every claim in that sweep; claims do not carry individual timestamps (Section 10). Every finding MUST carry a `confirmation` state:
 
 - **`suspected`** — first observation of the disagreement.
-- **`confirmed`** — the disagreement was re-observed in a sweep whose `observed_at` exceeds the first observation by at least the deployment's configured **staleness window** for the participating sources.
+- **`confirmed`** — the disagreement was re-observed in a sweep whose `observed_at` exceeds the first observation by at least the deployment's configured **staleness window**.
 
-The staleness window is deployment configuration derived from the sources' propagation characteristics (TTLs, sync intervals). A verifier evaluates confirmation deterministically from the recorded timestamps and the window recorded in the Corroboration Record; no external clock is consulted. Consumers SHOULD treat `suspected` findings as monitoring signals and `confirmed` findings as evidence.
+A deployment MUST configure exactly one staleness window, expressed in seconds, applied to every finding in every sweep it produces, and MUST record it in each Corroboration Record (Section 10). It is derived from the propagation characteristics of the sources swept (TTLs, sync intervals) and SHOULD be set from the slowest of them, since a window shorter than a source's real propagation time manufactures confirmed findings from ordinary delay. Per-source or per-pair windows are deliberately not provided: the record carries a single `staleness_window_s`, so a verifier re-deriving confirmation from recorded bytes has exactly one window to apply. A verifier evaluates confirmation deterministically from the recorded timestamps and the window recorded in the Corroboration Record; no external clock is consulted. Consumers SHOULD treat `suspected` findings as monitoring signals and `confirmed` findings as evidence.
 
 # The Self-Description
 
@@ -226,7 +245,7 @@ Corroboration requires knowing each source's name for the same agent (**identity
 Rules:
 
 1. The signature MUST verify against the key encoded in `subject` (offline; `did:key` per its method specification {{DIDKEY}}). On failure the description contributes nothing and the consumer falls back to caller-supplied correspondence. A fallback MUST NOT be silently overridden by an unverifiable description.
-2. **Supersession.** `seq` is a monotonically increasing integer. Among validly signed descriptions for one subject, the highest `seq` is authoritative. A source serving a description with `seq` lower than one the consumer has already verified is serving superseded material; this SHOULD be reported as a finding of kind `stale_description` attributing that source.
+2. **Supersession.** `seq` is a monotonically increasing integer. Among validly signed descriptions for the same subject, the description with the highest `seq` value is authoritative. A source serving a description whose `seq` value is lower than that of a description the consumer has already verified for the same subject is serving superseded material; this SHOULD be reported as a finding of kind `stale_description` attributing that source.
 3. **Agent equivocation.** Two validly signed descriptions for one subject with equal `seq` and differing JCS bytes MUST be reported as a finding of kind `agent_equivocation`. This indicates key compromise or a misbehaving agent and is not attributable to any source.
 4. **Distribution.** The description SHOULD be obtainable from each participating source and MUST, when so distributed, be corroborated as its own layer under this procedure (view: `{seq, aliases_digest, endpoints_digest}`), so that omission or replay of the description by a source is an ordinary finding.
 5. **Verify-back.** A record fetched via an alias asserted in a description MUST bind to the same `subject` key to contribute a claim; a record that does not bind back contributes no claim and MUST NOT produce a divergence finding (Section 5's no-laundering rule extended to correspondence).
@@ -254,14 +273,14 @@ An Answer Scope declares an **axis**, never a mapping. "`endpoint` varies by `re
 }
 ~~~
 
-`seq` is a monotonic counter the operator bumps on each re-issue; freshness is supersession by `seq`, so a verifier consults no clock. `subject` is the operator's key — distinct from the agent key of Section 8, which attests an agent about itself; an Answer Scope attests an operator about its own registry.
+`seq` is a monotonically increasing integer that the operator increments whenever it reissues the bundle; freshness is supersession by `seq`, so no external clock is required to order two bundles. `subject` identifies the operator's verification key, distinct from the agent key of Section 8: an agent self-description attests an agent about itself, while an Answer Scope attests an operator about its own registry.
 
 ## Verification
 
 A verifier MUST reject a bundle unless all of the following hold.
 
 1. The signature verifies against the key `subject` encodes.
-2. `label` equals the label the bundle was retrieved from, by exact octet equality — no normalization of scheme, case, port, or trailing path. **This rule is central:** a valid signature proves only that *some* operator authored the bundle and says nothing about which sources that operator controls; serving it at the label is what demonstrates control of the label. Inferring equivalence between spellings would let one naming convention acquire authority over another.
+2. `label` equals the label the bundle was retrieved from, by exact octet equality — no normalization of scheme, case, port, or trailing path. **This rule is central:** a valid signature establishes that the holder of the `subject` key authored the bundle; it does not, by itself, establish control of any particular source label. Serving the bundle at the label is what supplies that evidence. Inferring equivalence between spellings would let one naming convention acquire authority over another.
 3. Every `vantage_class` is occupiable (Section 3.1). A verifier MUST maintain an explicit set of classes it accepts and MUST reject any other; widening that set is a deliberate act.
 4. Every `field` and `vantage_class` matches the token grammar of Section 3.1. Wildcards and catch-alls MUST be rejected at the token level, irrespective of the accepted class set — the permissive form of a declared-scope mechanism is what becomes its attack surface.
 5. No `field` appears twice. Overlapping scopes would let an operator select, after the fact, whichever applies.
@@ -286,9 +305,11 @@ An implementation MUST record, in every annotated finding, which `seq` of the de
 
 ## scope_violation
 
-A source that varies a field contrary to a scope it published itself — most plainly, one whose scope asserted no variation — is not exhibiting an undeclared divergence. It has published a rule and broken it. Emit a `scope_violation` finding attributing that source. Detail: `{source, field, declared_class, observed}`.
+A source that varies a field contrary to an Answer Scope it *previously* published — most plainly, one whose scope asserted no variation — is not merely exhibiting an undeclared divergence. It has published a constraint and violated it. A corroborator MUST emit a `scope_violation` finding attributing that source. Detail: `{source, field, declared_class, observed, declaration_version}`.
 
-This is the strongest accusation the procedure makes, and it is available only because the declaration precedes the observation.
+**The temporal rule is not optional.** A corroborator MUST NOT emit `scope_violation` unless it can establish that the scope it evaluated was published *before* the observation it contradicts. Section 9.4 prevents a source retroactively legitimizing a past divergence by publishing a broader scope; the same reasoning applies in the opposite direction, and with a different victim. Without the temporal rule, a narrower scope published after the fact — by the source under duress, or by anyone who can influence what a sweeper fetches — manufactures an accusation about an observation that did not violate anything at the time it was made. Establishing publication order requires a witnessed history of what a source published when, which this document places out of scope (Section 14); until a deployment has one, it MUST NOT emit this kind.
+
+This is the strongest accusation the procedure makes, and it is available only because the declaration precedes the observation. An implementation that cannot demonstrate that ordering has not earned the accusation.
 
 # The Corroboration Record
 
@@ -324,33 +345,37 @@ Rules:
 
 1. `record_id` MUST equal the CORR-DIGEST of the record minus `record_id` and `signature`. A verifier MUST recompute and compare. `observed_at` is an RFC 3339 {{RFC3339}} UTC timestamp with a `Z` suffix.
 2. The signature MUST verify against `sweeper`. Self-attestation by the sweeping party is the base tier; a record MAY additionally be registered with an append-only transparency service (e.g., a SCITT Transparency Service {{SCITT}}), in which case a consumer MUST NOT report the anchored tier without verifying an inclusion proof against a log key it trusts.
-3. All monetary, count, and window values are exact integers or decimal strings; floating-point values MUST NOT appear.
+3. All count and duration values are exact integers or decimal strings; floating-point values MUST NOT appear in any digest-bearing field.
 4. `claims` MUST include `error`-status entries (excluded from the diff, preserved for audit).
 5. A consumer binding a Corroboration Record from another evidence format SHOULD bind `record_id` and SHOULD state the verdict it relied upon.
+5a. The verdict MUST be computed as follows, and only as follows. The verdict is `INSUFFICIENT` if and only if the record contains fewer than two `present`-or-`absent` claims. Otherwise the verdict is `DIVERGENT` if and only if `findings` is non-empty, and `AGREE` otherwise. A `declared` annotation on a finding (Section 9.4) does not affect this computation.
+5b. `observed_at` is the observation time of every claim in the record. Claims do not carry individual timestamps; a deployment whose sweeps span a period long enough for that to matter SHOULD shorten its sweeps rather than reinterpret this field (Section 14).
 6. `declared` MUST be present on every finding, defaulting to `false`; `declaration_version` MUST carry the matched `seq` when `declared` is `true` and MUST be null otherwise. Neither member participates in any dedup or first-observation key a consumer maintains — they describe what the source had published, not which disagreement was observed, and a source publishing or revising a declaration MUST NOT change the identity of a finding already being tracked.
 7. A verifier MUST check `version` against the set of record versions it accepts and MUST reject any other. A verifier consuming records issued before this revision MUST accept `corroboration/0.1` alongside `corroboration/0.2`; the added members are the only difference, and their absence is read as `declared: false`.
 
 # Reference Layer Instantiations
 
-**Discovery** — view `{endpoint, did}`. Resolvers: a by-id HTTP registry resolver (`GET {base}/api/agents/{id}`, path injectable); a two-hop index resolver (resolve a locator to `{registry_url, identifier}`, then fetch the record; a missing or empty hop field is `error`, a not-found at either hop is `absent`). The `did` field is populated only per Section 5's verified-field rule, from a signed record verified offline against its embedded `did:key`, with subject binding to the outer id.
+**Discovery** — view `{endpoint, did}`. Resolvers: a by-id HTTP registry resolver (`GET {base}/api/agents/{id}`, path injectable); a two-hop index resolver (resolve a locator to `{registry_url, identifier}`, then fetch the record; a missing or empty hop field yields an `error` claim, a not-found at either hop is `absent`). The `did` field is populated only per Section 5's verified-field rule, from a signed record verified offline against its embedded `did:key`, with subject binding to the outer id.
 
-**Identity** — view `{key}`, the agent's Ed25519 verification key in `did:key` multibase form (the encoding shared by `did:key` identifiers and `Ed25519VerificationKey2020` {{EDSIG2020}} `publicKeyMultibase`, so keys compare as strings). Resolvers: `did:key` (offline; the self-certifying root), `did:web` (fetched from the method-specified document location; `404` is `absent`), and a Universal Resolver adapter. A method serving a different key than the root is a `key` divergence.
+**Identity** — view `{key}`, the agent's Ed25519 verification key, represented in `did:key` multibase form (the encoding shared by `did:key` identifiers and `Ed25519VerificationKey2020` {{EDSIG2020}} `publicKeyMultibase`, so keys compare as strings). Resolvers: `did:key` (offline; the self-certifying root), `did:web` (fetched from the method-specified document location; `404` is `absent`), and a Universal Resolver adapter. A method serving a different key than the root is a `key` divergence.
 
 # Finding Kinds and Extensibility
 
-Kinds seeded by this document: `omission`, `source_equivocation`, `scope_violation`, `stale_description`, `agent_equivocation`, and one kind per view field name of a registered layer (this document seeds `endpoint`, `did`, `key`). Bare (un-prefixed) kind names are reserved for values seeded in this document and its successors; any party introducing a new kind MUST namespace it with a reverse-DNS or URI prefix. A consumer MUST treat unknown kinds as informational and MUST NOT reject a record for carrying one.
+Kinds seeded by this document: `omission`, `source_equivocation`, `scope_violation`, `stale_description`, `agent_equivocation`, and one kind per view field name of a layer defined by this document or by an extension specification (this document seeds `endpoint`, `did`, `key`). Bare (un-prefixed) kind names are reserved for values seeded in this document and its successors; any party introducing a new kind MUST namespace it with a reverse-DNS or URI prefix. A consumer MUST treat unknown kinds as informational and MUST NOT reject a record for carrying one.
 
 # Conformance
 
-A conforming implementation MUST reproduce, for the shared corpus of fixed per-claim inputs, the exact finding set of Section 6 and the exact verdicts of Section 10, including: agreement yields no findings and an `AGREE` record; present-beside-absent yields `omission` with correct attribution; distinct field values yield that field's kind; an `error` claim is excluded and creates no omission; a positive soft-404 is `absent`; vantage disagreement within one source yields `source_equivocation` and, absent an applicable Answer Scope, withholds that source from the cross-source field comparison; where an Answer Scope applies, that finding is annotated `declared` and the source's per-vantage values enter the cohort comparison instead; one subject may carry multiple simultaneous findings; and every sweep yields a record whose `record_id` recomputes. The corpus is view-agnostic and reused by every layer.
+A conforming implementation MUST reproduce, for the shared corpus of fixed per-claim inputs, the exact finding set of Section 6 and the exact verdicts of Section 10, including: agreement yields no findings and an `AGREE` record; present-beside-absent yields `omission` with correct attribution; distinct field values yield that field's kind; an `error` claim is excluded and creates no omission; a positive soft 404 is `absent`; vantage disagreement within one source yields `source_equivocation` and, absent an applicable Answer Scope, withholds that source from the cross-source field comparison; where an Answer Scope applies, that finding is annotated `declared` and the source's per-vantage values enter the cohort comparison instead; one subject may carry multiple simultaneous findings; and every sweep yields a record whose `record_id` recomputes. The corpus is view-agnostic and reused by every layer.
 
-Answer Scope support is OPTIONAL. An implementation that does not support it conforms: with no declaration supplied, Section 6.2 yields a single cohort spanning every claim, and the procedure is identical to one with no notion of declaration. An implementation that *does* support it MUST NOT report `AGREE` for a sweep in which a declared-varying source's cohort disagrees — the redirection of Section 6.3 is not optional for an implementation that honours declarations at all, because honouring the declaration without it is strictly less safe than ignoring the declaration.
+Answer Scope support is OPTIONAL. An implementation that does not support it conforms: with no declaration supplied, Section 6.2 yields a single cohort spanning every claim, and the procedure is identical to one with no notion of declaration. An implementation that *does* support it MUST NOT report `AGREE` for a sweep in which a declared-varying source's cohort disagrees — the redirection of Section 6.3 is not optional for an implementation that honors declarations at all, because honouring the declaration without it is strictly less safe than ignoring the declaration.
 
 # Security Considerations
 
-**Independence.** Corroboration among k sources is worth exactly the independence among them. Sources sharing an upstream feed, an operator, or an incentive corroborate each other's misinformation by construction. This procedure records which sources agreed, enabling diversity-weighted consumption; it cannot manufacture diversity. Deployments SHOULD select sources with distinct operational and data lineage and SHOULD disclose known dependencies.
+**Independence.** Corroboration among k sources is worth exactly the independence among them. Sources sharing an upstream feed, an operator, or a material incentive may not provide independent corroboration, and can reproduce the same misinformation. This procedure records which sources agreed, enabling diversity-weighted consumption; it cannot manufacture diversity. Deployments SHOULD select sources with distinct operational and data lineage and SHOULD disclose known dependencies.
 
 **Residual equivocation.** Cross-vantage comparison detects per-network-path splits. It cannot detect a source lying identically to all of one consumer's vantages while answering other consumers differently; that residual requires witnessed, append-only transparency over served answers ({{RFC6962}}, {{RFC9162}}, {{CONIKS}}), out of scope here. The Corroboration Record is forward-compatible with such logs (a witnessed history of records).
+
+**Sweep-level observation time.** A record carries one `observed_at` for every claim in it, so a sweep that takes appreciable wall-clock time records claims as simultaneous when they were not. Confirmation (Section 7) is unaffected as long as the staleness window exceeds sweep duration, which it will for any realistic configuration. It does mean a record cannot be used to establish the relative ordering of two sources' answers within one sweep, and consumers MUST NOT read it as though it could.
 
 **Watch-set bootstrap.** A consumer cannot detect omission of an agent it never watched; a watch set enumerated from a single source inherits that source's omissions. Watch-set construction SHOULD draw on multiple sources.
 
@@ -368,7 +393,7 @@ Answer Scope support is OPTIONAL. An implementation that does not support it con
 
 # IANA Considerations
 
-This document requests no IANA actions. The finding-kind vocabulary is governed by the namespacing convention of Section 12; the occupiable vantage classes of Section 3.1 are likewise governed by this document and its successors, which seed `region` and `asn`, and a future revision MAY establish a registry for them should the set need to grow outside this document; the record and self-description `version` strings are governed by this document and its successors. A future revision MAY register a media type for the Corroboration Record (candidate: `application/corroboration-record+json`) once transport contexts warrant it.
+This document requests no IANA actions. The finding-kind vocabulary is governed by the namespacing convention of Section 12; this document defines `region` and `asn` as the initial occupiable vantage classes, with the value spaces given in Section 3.1, and a future revision MAY establish an IANA registry for further classes should the set need to grow outside this document and its successors; the record and self-description `version` strings are governed by this document and its successors. A future revision MAY register a media type for the Corroboration Record (candidate: `application/corroboration-record+json`) once transport contexts warrant it.
 
 --- back
 
@@ -382,7 +407,19 @@ This document requests no IANA actions. The finding-kind vocabulary is governed 
 - **Section 12.** Seeds the `scope_violation` kind.
 - **Section 13.** Conformance states that Answer Scope support is OPTIONAL and that an implementation without it conforms unchanged; an implementation with it MUST perform the redirection.
 - **Section 14.** Adds **Self-issued declarations** and **Observer distinguishability**.
-- **Section 15.** Records that the occupiable vantage classes are governed by this document, seeding `region` and `asn`.
+- **Section 15.** Defines `region` and `asn` as the initial occupiable vantage classes and notes an IANA registry as a future option.
+
+Editorial and precision changes throughout, following review:
+
+- The abstract and Section 1 no longer state that a signature offers no defense; they state that a signature does not, by itself, defend against omission or equivocation, and that self-certification *detects* tampering when verified against an expected identity.
+- **Section 3.1** identifies its constraint as a regular expression, and gives `region` and `asn` externally defined value spaces (ISO 3166-1 alpha-2 {{ISO3166}} and 32-bit ASNs {{RFC6793}}). Seeding a class name without a value space left shared denotation unenforceable.
+- **Section 6.2** states the cohort rule as four numbered rules rather than prose.
+- **Sections 2, 3, 7 and 10** reconcile `observed_at`. `-00` and earlier `-01` text required every *claim* to carry one while the record schema carried a single sweep-level value; the sweep-level value is now normative and the limitation is recorded in Section 14.
+- **Section 7** requires exactly one staleness window per deployment and says why per-source windows are not offered: the record carries a single `staleness_window_s`.
+- **Section 9.5** requires that a scope be shown to predate the observation it contradicts before `scope_violation` may be emitted, and states that a deployment without a witnessed publication history MUST NOT emit the kind. Without it, a narrower scope published after the fact manufactures an accusation.
+- **Section 10** states the verdict computation exhaustively, and drops "monetary" from the numeric rule (no monetary fields are defined).
+- **Section 12** no longer refers to a "registered layer"; this document defines no layer registry.
+- **Section 4** replaces the language-specific "MUST NOT raise" with a requirement to return an `error` claim.
 
 # Mapping to the Reference Implementation
 
