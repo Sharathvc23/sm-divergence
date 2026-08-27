@@ -103,7 +103,13 @@ from .identity import (
     verify_operator_description,
     verify_self_description,
 )
+from .licensing import (
+    AnswerScope,
+    build_answer_scope,
+    verify_answer_scope,
+)
 from .record import (
+    ACCEPTED_RECORD_VERSIONS,
     CORROBORATION_VERSION,
     build_corroboration_record,
     sign_sweep,
@@ -122,6 +128,7 @@ except _PackageNotFoundError:  # running from a source tree, not installed
 
 __all__ = [
     "CONFIRMED",
+    "ACCEPTED_RECORD_VERSIONS",
     "CORROBORATION_VERSION",
     "DEFAULT_PATH",
     "DID",
@@ -147,9 +154,12 @@ __all__ = [
     "RecordAdapter",
     "RecordView",
     "Resolver",
+    "AnswerScope",
     "OperatorDescription",
     "SelfDescription",
+    "build_answer_scope",
     "build_operator_description",
+    "verify_answer_scope",
     "verify_operator_description",
     "Status",
     "SweepResult",

@@ -18,14 +18,15 @@ member; ``record_id`` is the CORR-DIGEST of every member except itself and
 ``signature``)::
 
     {
-      "version": "corroboration/0.1",
+      "version": "corroboration/0.2",
       "record_id": "<hex CORR-DIGEST>",
       "subject": { "agent_id": "<id>", "did": "<did:key or null>" },
       "observed_at": "<RFC 3339 UTC, Z>",
       "staleness_window_s": <int>,
       "verdict": "AGREE" | "DIVERGENT" | "INSUFFICIENT",
       "claims":   [ { "source", "vantage", "status", "view", "outcome" }, … ],
-      "findings": [ { "kind", "agent_id", "confirmation", "detail" }, … ],
+      "findings": [ { "kind", "agent_id", "confirmation",
+                      "declared", "declaration_version", "detail" }, … ],
       "sweeper": "did:key:z6Mk…",
       "signature": "<base64 Ed25519>"
     }
@@ -42,7 +43,15 @@ from sm_resolver import Claim, SweepResult, ViewT
 
 from . import _signing
 
-CORROBORATION_VERSION = "corroboration/0.1"
+CORROBORATION_VERSION = "corroboration/0.2"
+
+# Versions this build will verify. Gated on a SET, never on equality with
+# CORROBORATION_VERSION: a record is evidence, and evidence issued before the
+# current revision must stay verifiable — equality-gating would silently
+# invalidate every record already in the wild on each bump. `0.2` adds
+# `declared`/`declaration_version` to each finding; their absence in a `0.1`
+# record reads as undeclared, which is the conservative interpretation.
+ACCEPTED_RECORD_VERSIONS: frozenset[str] = frozenset({"corroboration/0.1", CORROBORATION_VERSION})
 
 # agent_id → the subject's canonical did:key (or None when there is no verified
 # identity for it). Defaults to "no did" — the record still attests the sweep.
@@ -106,8 +115,14 @@ def verify_corroboration_record(record: Any, *, trusted_sweeper: str | None = No
     """Verify a record offline: recompute ``record_id`` (CORR-DIGEST of the body
     minus ``record_id`` and ``signature``) and verify ``signature`` against the
     key ``sweeper`` encodes. If ``trusted_sweeper`` is given, the record's sweeper
-    MUST equal it. Returns True iff both hold. Never raises."""
+    MUST equal it. The record's ``version`` MUST be one this build accepts
+    (``ACCEPTED_RECORD_VERSIONS``) — a signature proves the bytes are intact, not
+    that the shape is one this code understands, and verifying an unknown shape
+    means reporting members it never read. Returns True iff all hold. Never
+    raises."""
     if not isinstance(record, dict):
+        return False
+    if record.get("version") not in ACCEPTED_RECORD_VERSIONS:
         return False
     signature = record.get("signature")
     record_id = record.get("record_id")

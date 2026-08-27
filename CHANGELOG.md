@@ -4,6 +4,42 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] — 2026-08-27
+
+Registry-operator identity and the Answer Scope — a source declaring, in
+advance, which fields it varies and along which vantage class. Tracks
+`draft-chandra-agent-registry-corroboration-01`.
+
+### Added
+- `OperatorDescription` / `build_operator_description` /
+  `verify_operator_description` (`operator-description/0.1`). A `Resolver` is
+  identified only by `label`, a URL; the subject, the served record and the
+  sweeper all have keys, but the source *as an operator* had none, so nothing a
+  registry signed about itself could be checked. Verification is two-part: the
+  signature proves only that *some* operator authored the bundle, so the bundle
+  must also name the label it was **served from** — serving it there is what
+  demonstrates control of it. Labels match by exact equality, no URL
+  normalisation.
+- `AnswerScope` / `build_answer_scope` / `verify_answer_scope`
+  (`answer-scope/0.1`), in the new `sm_divergence.licensing` package. Declares an
+  **axis** (`{"field": "endpoint", "vantage_class": "region"}`), never a mapping.
+  Rejects a non-occupiable `vantage_class`, a wildcard at the token level even
+  when the accepted class set is widened, a field declared twice, and more than
+  `MAX_SCOPES` entries. An empty `scopes` list verifies and positively asserts
+  *no* variation — distinct from publishing nothing, which is ambiguous between
+  "does not vary" and "does not implement this".
+- `ACCEPTED_RECORD_VERSIONS`. `verify_corroboration_record` now checks the
+  record's `version` against it, gating on a **set** rather than equality so
+  that records issued before this revision stay verifiable.
+
+### Changed
+- **`CORROBORATION_VERSION` is `corroboration/0.2`.** Findings carry `declared`
+  and `declaration_version`. `corroboration/0.1` records remain acceptable; the
+  absent members read as undeclared.
+- Requires `sm-resolver` >= 0.3 (the declared-divergence `Finding` members and
+  cohort comparison). **Release `sm-resolver` 0.3.0 first** — this floor cannot
+  resolve until it is published.
+
 ## [0.8.0] — 2026-07-04
 
 The signed Corroboration Record, the portable agent self-description, and a
