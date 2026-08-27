@@ -89,6 +89,14 @@ These are consequences of the threat model, not preferences.
    human — is policy that belongs to the caller. Fusing detection to a fixed
    response would make the tool wrong for every deployment whose policy differs.
 
+5. **A declaration annotates; it never absolves.** A source may publish, in
+   advance, that it varies a field by context (§6). Where it has, the finding is
+   *marked* as declared and still emitted, with the verdict unchanged. This is
+   axiom 4 restated for declarations: deciding whether a declared divergence is
+   acceptable is exactly the policy judgement axiom 4 refuses to make. It also
+   keeps the source's own commitment in the record, which is what makes the
+   opposite case — varying *contrary* to what was declared — a finding at all.
+
 ## 3. The primitive: resolve · view · diff
 
 Corroboration factors into three pieces, and only the first is format-specific:
@@ -103,7 +111,10 @@ Corroboration factors into three pieces, and only the first is format-specific:
   unverifiable field is not a disagreement (axiom 3).
 - **Diff** — a pure function over the views from all sources. It emits `omission`
   (present on one, positively absent on another) and one finding per view field
-  whose non-`None` values disagree. It never learns what layer it is serving.
+  whose non-`None` values disagree. Comparison is scoped to a *cohort* — the
+  claims sharing one observation context — which matters only where a source has
+  declared that it varies (§6); otherwise one cohort spans every claim. It never
+  learns what layer it is serving.
 
 Because the diff operates on normalized views, it is untouched by format
 heterogeneity: a claim from a NEST-style registry and a claim from a two-hop
@@ -187,7 +198,54 @@ the self-description is the artifact that anchors the stack: hand over the
 `did:key`, verify one signature, and the agent tells you — provably — where it is
 under every name.
 
-## 6. NANDA alignment
+## 6. Declared variation
+
+Not every difference between two sources is misbehavior. A registry under a
+data-residency obligation serves a different endpoint in one region than in
+another, by design and often by law. A primitive that reports every such
+difference as equivocation fires on normal operation, and a detector that fires
+on normal operation gets switched off — which costs more than the false
+positives did.
+
+An **Answer Scope** is a source-signed bundle declaring, in advance, which fields
+it varies and along which context class. It declares an *axis*, never a mapping.
+"`endpoint` varies by region" is checkable: a verifier goes to another region and
+looks. "EU callers get X" would be a promise about values made by the party doing
+the varying, and a promise adds a label to a finding without adding any way to
+test it.
+
+Three constraints do the work, and each closes a way the mechanism could become a
+blanket excuse:
+
+- **The context must be occupiable.** A verifier must be able to construct it and
+  repeat the observation. Region and network are occupiable. Caller identity,
+  tenant, and subscription tier are not — a declaration about one could only be
+  believed, and a corroborator that credited it would be reporting the source's
+  own assertion back as evidence.
+- **The declaration must be bound to the source that made it.** A valid signature
+  proves only that *some* operator wrote the bundle; serving it at the source's
+  own label is what demonstrates control of that label. Both are required.
+- **No catch-alls.** Wildcards are refused, a field may be declared once, and the
+  number of declared fields is bounded. The permissive form of a declared-scope
+  mechanism is what turns it into an attack surface.
+
+Declaring *nothing* is also a statement, and a different one from silence. An
+empty scope asserts that the source does not vary; publishing nothing is
+ambiguous between "does not vary" and "has never implemented this".
+
+### What it does not settle
+
+The party declaring the variation is the party exhibiting it. In the deployed
+mechanisms this design borrows from, that is not so — a parent zone, a parent
+certificate authority, or a standards body sets the tolerance. Occupiability is
+the structural answer: a declaration on an axis a verifier can occupy is
+falsifiable by observation, which is why non-occupiable axes are refused outright
+rather than discouraged. A residual remains — a source that can tell it is being
+corroborated can serve the corroborator the declared answer and everyone else
+something else — and it is the same residual as single-source first contact (§8),
+with the same eventual answer.
+
+## 7. NANDA alignment
 
 Project NANDA organizes the internet of agents into four pillars — **DNS**
 (discovery), **CA** (identity), **Orchestration**, **Attestation**.
@@ -204,7 +262,7 @@ concrete mechanism behind **accountable discovery** — the claim that a federat
 registry is not merely decentralized but *auditable*, that a participant can
 catch a source lying rather than having to trust it.
 
-## 7. Open questions
+## 8. Open questions
 
 - **Single-source first contact.** Corroboration catches a source that disagrees
   with its peers. It cannot catch a *single* source lying *consistently* to a
@@ -212,6 +270,13 @@ catch a source lying rather than having to trust it.
   against. Closing that last mile is transparency-log territory (an append-only,
   witnessed log of what each source served over time), a stricter and stateful
   primitive deliberately out of scope here.
+- **Proof that a declaration came first.** An Answer Scope carries a monotonic
+  sequence number, which orders declarations against each other but not against
+  an observation. A source that is caught can still sign a declaration
+  afterwards. Establishing that a declaration existed *before* the divergence it
+  covers needs a witnessed record of what was published when — the same
+  transparency-log territory as single-source first contact, and unsolved here
+  for the same reason.
 - **Quorum across many sources.** With more than two sources, a threshold policy
   (*k*-of-*n* agree) is more robust than pairwise disagreement; the diff surfaces
   every pairwise split today, and a quorum reducer is a natural layer above it.
