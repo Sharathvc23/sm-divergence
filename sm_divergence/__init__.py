@@ -109,6 +109,7 @@ from .licensing import (
     verify_answer_scope,
 )
 from .record import (
+    ACCEPTED_RECORD_VERSIONS,
     CORROBORATION_VERSION,
     build_corroboration_record,
     sign_sweep,
@@ -127,6 +128,7 @@ except _PackageNotFoundError:  # running from a source tree, not installed
 
 __all__ = [
     "CONFIRMED",
+    "ACCEPTED_RECORD_VERSIONS",
     "CORROBORATION_VERSION",
     "DEFAULT_PATH",
     "DID",

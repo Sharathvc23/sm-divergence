@@ -51,7 +51,7 @@ def test_record_has_paper_shape_and_roundtrips() -> None:
         "sweeper",
         "signature",
     }
-    assert record["version"] == "corroboration/0.1"
+    assert record["version"] == "corroboration/0.2"
     assert record["verdict"] == "DIVERGENT"
     assert record["subject"] == {"agent_id": "x", "did": None}
     assert record["observed_at"] == "2025-07-04T03:33:20Z"
@@ -129,3 +129,55 @@ async def test_sign_sweep_emits_one_record_per_subject() -> None:
     assert len(records) == 2  # a record per subject, whatever the verdict
     assert all(verify_corroboration_record(r) for r in records)
     assert {r["subject"]["agent_id"] for r in records} == {"one", "two"}
+
+
+# ── record version gate (draft -01 §10 rule 7) ──────────────
+
+
+def _resigned_with_version(record: dict, version: str, key: bytes) -> dict:
+    """Rebuild a record under a different `version`, correctly signed — so a
+    rejection is attributable to the version and not to a broken signature."""
+    from sm_divergence._signing import canonical, sign
+
+    body = {k: v for k, v in record.items() if k not in ("record_id", "signature")}
+    body["version"] = version
+    signed = {**body, "record_id": corr_digest(body)}
+    signed["signature"] = sign(key, canonical(signed))
+    return signed
+
+
+def test_a_record_with_an_unrecognised_version_is_rejected() -> None:
+    # Correctly signed and content-addressed, but a shape this verifier does not
+    # know. Without the gate it verifies silently and the version string is
+    # decoration.
+    key = _sweeper_key()
+    record = _resigned_with_version(
+        build_corroboration_record(_divergent_sweep(), sweeper_private_key=key), "corroboration/9.9", key
+    )
+    assert verify_corroboration_record(record) is False
+
+
+def test_the_previous_record_version_is_still_accepted() -> None:
+    # Gate on a SET, never equality: records issued before the current revision
+    # remain verifiable, or the bump silently invalidates every one of them.
+    key = _sweeper_key()
+    record = _resigned_with_version(
+        build_corroboration_record(_divergent_sweep(), sweeper_private_key=key), "corroboration/0.1", key
+    )
+    assert verify_corroboration_record(record) is True
+
+
+def test_a_missing_version_is_rejected() -> None:
+    key = _sweeper_key()
+    base = build_corroboration_record(_divergent_sweep(), sweeper_private_key=key)
+    body = {k: v for k, v in base.items() if k not in ("record_id", "signature", "version")}
+    from sm_divergence._signing import canonical, sign
+
+    signed = {**body, "record_id": corr_digest(body)}
+    signed["signature"] = sign(key, canonical(signed))
+    assert verify_corroboration_record(signed) is False
+
+
+def test_records_are_built_at_the_current_version() -> None:
+    record = build_corroboration_record(_divergent_sweep(), sweeper_private_key=_sweeper_key())
+    assert record["version"] == "corroboration/0.2"
