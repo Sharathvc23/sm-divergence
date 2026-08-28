@@ -18,7 +18,8 @@ member; ``record_id`` is the CORR-DIGEST of every member except itself and
 ``signature``)::
 
     {
-      "version": "corroboration/0.2",
+      "version": "corroboration/0.3",
+      "alg": "EdDSA",
       "record_id": "<hex CORR-DIGEST>",
       "subject": { "agent_id": "<id>", "did": "<did:key or null>" },
       "observed_at": "<RFC 3339 UTC, Z>",
@@ -43,7 +44,7 @@ from sm_resolver import Claim, SweepResult, ViewT
 
 from . import _signing
 
-CORROBORATION_VERSION = "corroboration/0.2"
+CORROBORATION_VERSION = "corroboration/0.3"
 
 # Versions this build will verify. Gated on a SET, never on equality with
 # CORROBORATION_VERSION: a record is evidence, and evidence issued before the
@@ -51,7 +52,11 @@ CORROBORATION_VERSION = "corroboration/0.2"
 # invalidate every record already in the wild on each bump. `0.2` adds
 # `declared`/`declaration_version` to each finding; their absence in a `0.1`
 # record reads as undeclared, which is the conservative interpretation.
-ACCEPTED_RECORD_VERSIONS: frozenset[str] = frozenset({"corroboration/0.1", CORROBORATION_VERSION})
+ACCEPTED_RECORD_VERSIONS: frozenset[str] = frozenset({"corroboration/0.1", "corroboration/0.2", CORROBORATION_VERSION})
+
+# Versions issued before `alg` existed. Ed25519 is implied for these; the member
+# is REQUIRED from corroboration/0.3 onward.
+_PRE_ALG_VERSIONS: frozenset[str] = frozenset({"corroboration/0.1", "corroboration/0.2"})
 
 # agent_id → the subject's canonical did:key (or None when there is no verified
 # identity for it). Defaults to "no did" — the record still attests the sweep.
@@ -87,6 +92,7 @@ def build_corroboration_record(
     sweeper = _signing.did_key_from_pubkey(_signing.public_from_private(sweeper_private_key))
     body: dict[str, Any] = {
         "version": CORROBORATION_VERSION,
+        "alg": _signing.ALG_ED25519,
         "subject": {"agent_id": result.agent_id, "did": did_for(result.agent_id) if did_for else None},
         "observed_at": _signing.rfc3339(result.observed_at),
         "staleness_window_s": int(result.staleness_window_s),
@@ -138,6 +144,24 @@ def verify_corroboration_record(record: Any, *, trusted_sweeper: str | None = No
         return False
     pub = _signing.pubkey_from_did_key(sweeper)
     if pub is None:
+        return False
+    # The algorithm must agree with the key type the sweeper's did:key encodes.
+    # Reading `alg` and trusting it would be a downgrade vector: a record could
+    # claim one algorithm while the signature was made with another. The key is
+    # authoritative; `alg` states the obligation rather than deciding it.
+    #
+    # `alg` is REQUIRED from corroboration/0.3. Records issued before it have no
+    # such member and Ed25519 is implied — requiring it unconditionally would
+    # invalidate every record already issued, which is the same failure
+    # ACCEPTED_RECORD_VERSIONS exists to prevent.
+    expected = _signing.alg_from_did_key(sweeper)
+    if expected is None:
+        return False
+    alg = record.get("alg")
+    if alg is None:
+        if record.get("version") not in _PRE_ALG_VERSIONS:
+            return False
+    elif alg != expected:
         return False
     signed = {k: v for k, v in record.items() if k != "signature"}
     return _signing.verify(pub, _signing.canonical(signed), signature)

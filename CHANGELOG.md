@@ -4,6 +4,42 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] — 2026-08-28
+
+The record names its signature algorithm, and the name is bound to the key.
+Tracks `draft-chandra-agent-registry-corroboration-02` (in preparation).
+
+### Added
+
+- **`alg` on the Corroboration Record**, carrying the JOSE/COSE identifier
+  (`EdDSA`). The algorithm appeared nowhere in the record; a verifier had to know
+  it out of band, and a second algorithm could not be introduced without silently
+  changing what every existing record meant.
+
+- **`alg_from_did_key`**, and the rule that makes the member safe. A `did:key`
+  already encodes the key type in its multicodec prefix, so the algorithm was
+  always discoverable. Naming it is the easy half.
+
+  **The half that matters is the binding: `alg` MUST agree with the key type the
+  `sweeper` did:key encodes.** A verifier that reads `alg` and trusts it has
+  gained a downgrade vector, not agility — a record could claim one algorithm
+  while the signature was made with another. The key is authoritative; `alg`
+  states the obligation rather than deciding it.
+
+  Adding a second algorithm is now an entry in one table.
+
+### Changed
+
+- **`CORROBORATION_VERSION` is `corroboration/0.3`.** `alg` is REQUIRED from this
+  version. Records at `0.1` and `0.2` have no such member and Ed25519 is implied;
+  if one names an algorithm, it must still agree.
+
+  Requiring it unconditionally invalidated every record already issued — the same
+  failure `ACCEPTED_RECORD_VERSIONS` exists to prevent, arriving through a
+  different door. Caught by running the full suite, and now pinned by a test.
+
+- Requires `sm-resolver` >= 0.5 (the seeded outcome vocabulary; 0.4.0 is skipped — its protocol change type-broke consumers and was corrected in 0.5.0).
+
 ## [0.9.0] — 2026-08-27
 
 Registry-operator identity and the Answer Scope — a source declaring, in

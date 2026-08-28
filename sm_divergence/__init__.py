@@ -58,6 +58,7 @@ from sm_resolver import (
     diff_views,
 )
 
+from ._signing import ALG_ED25519
 from .detector import DivergenceDetector, check_once
 from .discovery import (
     DEFAULT_PATH,
@@ -129,6 +130,7 @@ except _PackageNotFoundError:  # running from a source tree, not installed
 __all__ = [
     "CONFIRMED",
     "ACCEPTED_RECORD_VERSIONS",
+    "ALG_ED25519",
     "CORROBORATION_VERSION",
     "DEFAULT_PATH",
     "DID",
