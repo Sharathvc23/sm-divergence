@@ -4,8 +4,8 @@
 
 Network Working Group                                         S. Chandra
 Internet-Draft                                           Stellarminds.ai
-Intended status: Standards Track                          28 August 2026
-Expires: 1 March 2027
+Intended status: Standards Track                          27 August 2026
+Expires: 28 February 2027
 
 
            Multi-Source Corroboration for AI Agent Discovery
@@ -44,7 +44,7 @@ Status of This Memo
    time.  It is inappropriate to use Internet-Drafts as reference
    material or to cite them other than as "work in progress."
 
-   This Internet-Draft will expire on 1 March 2027.
+   This Internet-Draft will expire on 28 February 2027.
 
 Copyright Notice
 
@@ -53,7 +53,7 @@ Copyright Notice
 
 
 
-Chandra                   Expires 1 March 2027                  [Page 1]
+Chandra                 Expires 28 February 2027                [Page 1]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -109,7 +109,7 @@ Table of Contents
 
 
 
-Chandra                   Expires 1 March 2027                  [Page 2]
+Chandra                 Expires 28 February 2027                [Page 2]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -124,15 +124,15 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    source withholds an artifact and there is therefore no artifact
    signature to verify; and *equivocation*, in which a source serves two
    inconsistent artifacts to different observers, each individually
-   valid.  Both require a structurally different defense: comparison of
+   valid.  Both require a structurally different defense, comparison of
    independent observations, with its own failure modes and evidence.
 
    This document specifies that comparison.  It normatively fixes the
-   decision procedure (claim classification in Section 4, the view
-   contract in Section 5, the diff in Section 6, the confirmation
-   discipline in Section 7, the self-description mechanism in Section 8,
-   the Answer Scope in Section 9, and the Corroboration Record in
-   Section 10), and treats the byte-level fetch per source as an
+   decision procedure — claim classification (Section 4), the view
+   contract (Section 5), the diff (Section 6), the confirmation
+   discipline (Section 7), the self-description mechanism (Section 8),
+   the Answer Scope (Section 9), and the Corroboration Record
+   (Section 10) — and treats the byte-level fetch per source as an
    injectable implementation detail, because interoperability lives in
    the comparison and the record, not in any source's wire format.
 
@@ -143,9 +143,10 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    admits this without conceding anything: a source may declare, in
    advance, an axis a third party can independently occupy along which
    it varies a field.  A declaration so made *annotates* a finding and
-   never withdraws it, the disagreement still stands and the verdict is
-   unchanged, while a source that varies contrary to its own declaration
-   earns a stronger finding than one that never declared at all.
+   never withdraws it — the disagreement still stands and the verdict is
+   unchanged — while a source that varies contrary to its own
+   declaration earns a stronger finding than one that never declared at
+   all.
 
    The procedure serves any layer at which a middleman answers questions
    about an agent: discovery (which endpoint), identity (which key),
@@ -160,17 +161,19 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in all
    capitals, as shown here.
 
-   *Source:* Anything that answers "what do you have for agent X?": a
-   registry, a name service, a DID method, a catalog, an evidence store.
 
 
 
-Chandra                   Expires 1 March 2027                  [Page 3]
+
+Chandra                 Expires 28 February 2027                [Page 3]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
-   *Vantage:* The observation context under which a source is observed:
+   *Source:* Anything that answers "what do you have for agent X?" — a
+   registry, a name service, a DID method, a catalog, an evidence store.
+
+   *Vantage:* The observation context under which a source is observed —
    the conditions the claim was obtained under, not the observing
    instance.  Two sweeps of one source from two hosts in the same
    context bear the same vantage.  One source MAY be observed from
@@ -218,10 +221,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-
-
-
-Chandra                   Expires 1 March 2027                  [Page 4]
+Chandra                 Expires 28 February 2027                [Page 4]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -256,11 +256,11 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    shared denotation (below) a fact rather than an agreement between
    sweepers:
 
-   *  *region*: the value MUST be an ISO 3166-1 alpha-2 code [ISO3166],
+   *  *region* — the value MUST be an ISO 3166-1 alpha-2 code [ISO3166],
       lowercased. region:de, region:us, and the exceptionally reserved
       region:eu are well-formed.
 
-   *  *asn*: the value MUST be the string as followed by the decimal
+   *  *asn* — the value MUST be the string as followed by the decimal
       representation of a 32-bit Autonomous System Number [RFC6793],
       with no leading zeros: asn:as64500.
 
@@ -277,7 +277,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                  [Page 5]
+Chandra                 Expires 28 February 2027                [Page 5]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -291,8 +291,8 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
       and observe from independently. region and asn are occupiable: a
       verifier can place itself in that region or on that network and
       repeat the observation.  Attributes of the caller _relationship_
-      rather than of the observation, caller identity, tenant,
-      subscription tier, authorization level, are NOT occupiable and
+      rather than of the observation — caller identity, tenant,
+      subscription tier, authorization level — are NOT occupiable and
       MUST NOT be encoded as a vantage. *This rule is central:* a
       variation on a non-occupiable attribute cannot be independently
       checked, so a corroborator that credited a declaration of one
@@ -303,7 +303,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
       identifier by two contexts.  A sweeper that cannot guarantee this
       MUST use null.
 
-   *  *Cardinality.* A class MUST have a small, enumerable value set.  A
+   *  *Cardinality.* A class MUST have a small, enumerable value set — a
       high-cardinality dimension partitions observations until nothing
       is compared against anything, degrading corroboration to silence
       while appearing to function.
@@ -311,7 +311,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    The null vantage asserts no context.  It is not a comparable
    identifier and MUST NOT be compared for equality against a non-null
    one as though it named one.  It is correct for a single-vantage
-   sweeper and REQUIRED where the obligations above cannot be met,
+   sweeper and REQUIRED where the obligations above cannot be met —
    declining to name a context is always sound, whereas naming one
    wrongly is not.
 
@@ -320,9 +320,9 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    For a source S, vantage V, and agent A, a resolver MUST classify the
    outcome as exactly one of:
 
-   *  *present*: S served a claim for A, reduced to a view (Section 5).
+   *  *present* — S served a claim for A, reduced to a view (Section 5).
 
-   *  *absent*: S positively asserts A is unknown.  Each resolver
+   *  *absent* — S positively asserts A is unknown.  Each resolver
       defines the positive-absence predicate for its source type; for
       HTTP sources a 404 MUST be classified absent, and a 200 whose body
       positively signals not-found SHOULD be classified absent.  Non-
@@ -333,12 +333,12 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                  [Page 6]
+Chandra                 Expires 28 February 2027                [Page 6]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
-   *  *error*: any other outcome: connection failure, timeout, non-
+   *  *error* — any other outcome: connection failure, timeout, non-
       absence error status, unparseable body, or an answer that the
       resolver cannot map to a view.
 
@@ -346,7 +346,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    unclassified failure to the diff procedure.  An error claim MUST be
    excluded from the diff entirely.  This rule is central: *a source
    that failed to answer has asserted nothing and MUST NOT be treated as
-   claiming absence*, otherwise every transient fault becomes a false
+   claiming absence* — otherwise every transient fault becomes a false
    omission finding.
 
 5.  The View Contract
@@ -374,7 +374,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 6.  The Diff
 
    Input: the claims of one sweep for one agent.  The diff MUST be pure
-   (deterministic ordering, no I/O, no exceptions) and MUST derive
+   — deterministic ordering, no I/O, no exceptions — and MUST derive
    findings as follows.  One agent MAY yield multiple simultaneous
    findings.
 
@@ -389,7 +389,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                  [Page 7]
+Chandra                 Expires 28 February 2027                [Page 7]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -438,14 +438,14 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
    Absent an applicable Answer Scope, a source under source_equivocation
    for a field contributes no single agreed value to the Section 6.2
-   comparison for that field: a source that disagrees with itself cannot
-   corroborate.  Where an Answer Scope applies (Section 9.3), that
-   withholding is *replaced, not waived*: the source's per-vantage
+   comparison for that field — a source that disagrees with itself
+   cannot corroborate.  Where an Answer Scope applies (Section 9.3),
+   that withholding is *replaced, not waived*: the source's per-vantage
    values enter the cohort comparison of Section 6.2 instead. *This rule
 
 
 
-Chandra                   Expires 1 March 2027                  [Page 8]
+Chandra                 Expires 28 February 2027                [Page 8]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -453,7 +453,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    is central:* withholding the source without replacing it would let a
    source that declares variation serve one vantage a forged value and
    be recorded AGREE, because nothing would remain to compare that value
-   against, strictly worse than not honouring the declaration at all.
+   against — strictly worse than not honouring the declaration at all.
 
 7.  Observation Time and Confirmation
 
@@ -463,9 +463,9 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    claim in that sweep; claims do not carry individual timestamps
    (Section 10).  Every finding MUST carry a confirmation state:
 
-   *  *suspected*: first observation of the disagreement.
+   *  *suspected* — first observation of the disagreement.
 
-   *  *confirmed*: the disagreement was re-observed in a sweep whose
+   *  *confirmed* — the disagreement was re-observed in a sweep whose
       observed_at exceeds the first observation by at least the
       deployment's configured *staleness window*.
 
@@ -501,7 +501,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                  [Page 9]
+Chandra                 Expires 28 February 2027                [Page 9]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -557,7 +557,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 10]
+Chandra                 Expires 28 February 2027               [Page 10]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -608,12 +608,12 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    1.  The signature verifies against the key subject encodes.
 
    2.  label equals the label the bundle was retrieved from, by exact
-       octet equality, with no normalization of scheme, case, port, or
+       octet equality — no normalization of scheme, case, port, or
        trailing path. *This rule is central:* a valid signature
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 11]
+Chandra                 Expires 28 February 2027               [Page 11]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -630,7 +630,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
    4.  Every field and vantage_class matches the token grammar of
        Section 3.1.  Wildcards and catch-alls MUST be rejected at the
-       token level, irrespective of the accepted class set, the
+       token level, irrespective of the accepted class set — the
        permissive form of a declared-scope mechanism is what becomes its
        attack surface.
 
@@ -669,7 +669,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 12]
+Chandra                 Expires 28 February 2027               [Page 12]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -691,10 +691,10 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 9.5.  scope_violation
 
    A source that varies a field contrary to an Answer Scope it
-   _previously_ published, most plainly one whose scope asserted no
-   variation, is not merely exhibiting an undeclared divergence.  It has
-   published a constraint and violated it.  A corroborator MUST emit a
-   scope_violation finding attributing that source.  Detail: {source,
+   _previously_ published — most plainly, one whose scope asserted no
+   variation — is not merely exhibiting an undeclared divergence.  It
+   has published a constraint and violated it.  A corroborator MUST emit
+   a scope_violation finding attributing that source.  Detail: {source,
    field, declared_class, observed, declaration_version}.
 
    *The temporal rule is not optional.* A corroborator MUST NOT emit
@@ -703,13 +703,13 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    prevents a source retroactively legitimizing a past divergence by
    publishing a broader scope; the same reasoning applies in the
    opposite direction, and with a different victim.  Without the
-   temporal rule, a narrower scope published after the fact, by the
+   temporal rule, a narrower scope published after the fact — by the
    source under duress, or by anyone who can influence what a sweeper
-   fetches, manufactures an accusation about an observation that did not
-   violate anything at the time it was made.  Establishing publication
-   order requires a witnessed history of what a source published when,
-   which this document places out of scope (Section 14); until a
-   deployment has one, it MUST NOT emit this kind.
+   fetches — manufactures an accusation about an observation that did
+   not violate anything at the time it was made.  Establishing
+   publication order requires a witnessed history of what a source
+   published when, which this document places out of scope (Section 14);
+   until a deployment has one, it MUST NOT emit this kind.
 
    This is the strongest accusation the procedure makes, and it is
    available only because the declaration precedes the observation.  An
@@ -725,7 +725,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 13]
+Chandra                 Expires 28 February 2027               [Page 13]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -733,7 +733,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 10.  The Corroboration Record
 
    An implementation MUST emit a Corroboration Record for every (sweep,
-   subject) pair, *whatever the verdict*, AGREE, DIVERGENT, or
+   subject) pair, *whatever the verdict* — AGREE, DIVERGENT, or
    INSUFFICIENT.  A corroboration trail recording only disagreements
    cannot prove its checks ran; the agreement record is the positive
    attestation downstream consumers bind.
@@ -781,7 +781,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 14]
+Chandra                 Expires 28 February 2027               [Page 14]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -810,7 +810,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    6.  declared MUST be present on every finding, defaulting to false;
        declaration_version MUST carry the matched seq when declared is
        true and MUST be null otherwise.  Neither member participates in
-       any dedup or first-observation key a consumer maintains, they
+       any dedup or first-observation key a consumer maintains — they
        describe what the source had published, not which disagreement
        was observed, and a source publishing or revising a declaration
        MUST NOT change the identity of a finding already being tracked.
@@ -823,7 +823,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 11.  Reference Layer Instantiations
 
-   *Discovery*: view {endpoint, did}. Resolvers: a by-id HTTP registry
+   *Discovery* — view {endpoint, did}. Resolvers: a by-id HTTP registry
    resolver (GET {base}/api/agents/{id}, path injectable); a two-hop
    index resolver (resolve a locator to {registry_url, identifier}, then
    fetch the record; a missing or empty hop field yields an error claim,
@@ -837,12 +837,12 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 15]
+Chandra                 Expires 28 February 2027               [Page 15]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
-   *Identity*: view {key}, the agent's Ed25519 verification key,
+   *Identity* — view {key}, the agent's Ed25519 verification key,
    represented in did:key multibase form (the encoding shared by did:key
    identifiers and Ed25519VerificationKey2020 [EDSIG2020]
    publicKeyMultibase, so keys compare as strings).  Resolvers: did:key
@@ -885,7 +885,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    a single cohort spanning every claim, and the procedure is identical
    to one with no notion of declaration.  An implementation that _does_
    support it MUST NOT report AGREE for a sweep in which a declared-
-   varying source's cohort disagrees, the redirection of Section 6.3 is
+   varying source's cohort disagrees — the redirection of Section 6.3 is
    not optional for an implementation that honors declarations at all,
    because honouring the declaration without it is strictly less safe
    than ignoring the declaration.
@@ -893,7 +893,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 16]
+Chandra                 Expires 28 February 2027               [Page 16]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -935,9 +935,9 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    observations, not the sweeper's honesty; a dishonest sweeper can sign
    a fiction.  Anchoring bounds timing and prevents silent substitution;
    consumers with high assurance requirements SHOULD corroborate the
-   corroborator, multiple independent sweepers over the same watch set,
-   which this procedure supports without modification (sweep records are
-   themselves views to diff).
+   corroborator — multiple independent sweepers over the same watch set
+   — which this procedure supports without modification (sweep records
+   are themselves views to diff).
 
    *Staleness abuse.* An attacker aware of the staleness window can
    rotate lies faster than confirmation. suspected findings therefore
@@ -949,7 +949,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 17]
+Chandra                 Expires 28 February 2027               [Page 17]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -962,9 +962,9 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    *Self-issued declarations.* In every deployed mechanism this
    procedure draws on, the party authorizing variation is not the party
    exhibiting it: a parent zone, a parent CA, the subject, or a
-   standards body sets the tolerance.  An Answer Scope inverts that, the
-   source declares its own.  A declaration is therefore not evidence of
-   legitimacy and MUST NOT be treated as any; it is evidence only of
+   standards body sets the tolerance.  An Answer Scope inverts that —
+   the source declares its own.  A declaration is therefore not evidence
+   of legitimacy and MUST NOT be treated as any; it is evidence only of
    what the source committed to in advance, which is precisely what
    makes Section 9.5 possible.  Occupiability (Section 3.1) is the
    structural defense: a declaration on an axis a verifier can occupy is
@@ -975,8 +975,8 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
    more compliant.
 
    *Observer distinguishability.* A source able to identify the
-   corroborator (by network origin, credential, query shape, or timing)
-   can serve the corroborator its declared answer and other consumers
+   corroborator — by network origin, credential, query shape, or timing
+   — can serve the corroborator its declared answer and other consumers
    something else, and the procedure records the declared case.
    Occupiability bounds this but does not eliminate it: it guarantees a
    verifier _can_ occupy the declared context, not that it is
@@ -1005,7 +1005,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 18]
+Chandra                 Expires 28 February 2027               [Page 18]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -1029,7 +1029,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
    [ISO3166]  International Organization for Standardization, "Codes for
               the representation of names of countries and their
-              subdivisions, Part 1: Country codes", ISO 3166-1:2020,
+              subdivisions — Part 1: Country codes", ISO 3166-1:2020,
               2020.
 
    [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
@@ -1061,7 +1061,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 19]
+Chandra                 Expires 28 February 2027               [Page 19]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -1117,7 +1117,7 @@ Appendix A.  Changes from -00
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 20]
+Chandra                 Expires 28 February 2027               [Page 20]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -1173,7 +1173,7 @@ Internet-Draft        Agent Discovery Corroboration          August 2026
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 21]
+Chandra                 Expires 28 February 2027               [Page 21]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -1223,13 +1223,13 @@ Appendix B.  Mapping to the Reference Implementation
    The Answer Scope of Section 9 is split the same way: the kernel
    accepts an already-verified declaration as inert data and performs
    the cohort comparison of Section 6.2, while fetching, verifying and
-   matching the bundle belong to the layer above, the kernel holds no
+   matching the bundle belong to the layer above — the kernel holds no
    keys and performs no I/O.
 
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 22]
+Chandra                 Expires 28 February 2027               [Page 22]
 
 Internet-Draft        Agent Discovery Corroboration          August 2026
 
@@ -1285,4 +1285,4 @@ Author's Address
 
 
 
-Chandra                   Expires 1 March 2027                 [Page 23]
+Chandra                 Expires 28 February 2027               [Page 23]

@@ -32,7 +32,7 @@ normative:
   RFC8785:
   RFC6793:
   ISO3166:
-    title: "Codes for the representation of names of countries and their subdivisions, Part 1: Country codes"
+    title: "Codes for the representation of names of countries and their subdivisions — Part 1: Country codes"
     author:
       - org: International Organization for Standardization
     date: 2020
@@ -113,11 +113,11 @@ verifiable from recorded bytes.
 
 # Introduction
 
-An artifact served by a discovery source can be self-certifying: it can be signed such that a consumer verifies its content offline against an expected identity or key. Self-certification detects tampering with that artifact. It cannot, in principle, prevent two other behaviors available to any source: **omission**, in which a source withholds an artifact and there is therefore no artifact signature to verify; and **equivocation**, in which a source serves two inconsistent artifacts to different observers, each individually valid. Both require a structurally different defense: comparison of independent observations, with its own failure modes and evidence.
+An artifact served by a discovery source can be self-certifying: it can be signed such that a consumer verifies its content offline against an expected identity or key. Self-certification detects tampering with that artifact. It cannot, in principle, prevent two other behaviors available to any source: **omission**, in which a source withholds an artifact and there is therefore no artifact signature to verify; and **equivocation**, in which a source serves two inconsistent artifacts to different observers, each individually valid. Both require a structurally different defense, comparison of independent observations, with its own failure modes and evidence.
 
-This document specifies that comparison. It normatively fixes the decision procedure (claim classification in Section 4, the view contract in Section 5, the diff in Section 6, the confirmation discipline in Section 7, the self-description mechanism in Section 8, the Answer Scope in Section 9, and the Corroboration Record in Section 10), and treats the byte-level fetch per source as an injectable implementation detail, because interoperability lives in the comparison and the record, not in any source's wire format.
+This document specifies that comparison. It normatively fixes the decision procedure — claim classification (Section 4), the view contract (Section 5), the diff (Section 6), the confirmation discipline (Section 7), the self-description mechanism (Section 8), the Answer Scope (Section 9), and the Corroboration Record (Section 10) — and treats the byte-level fetch per source as an injectable implementation detail, because interoperability lives in the comparison and the record, not in any source's wire format.
 
-Not every difference between two sources is misbehavior. A source that is subject to a data-residency obligation may serve a different endpoint by design, and a procedure that reports every such difference as equivocation fires on normal operation. Section 9 admits this without conceding anything: a source may declare, in advance, an axis a third party can independently occupy along which it varies a field. A declaration so made **annotates** a finding and never withdraws it, the disagreement still stands and the verdict is unchanged, while a source that varies contrary to its own declaration earns a stronger finding than one that never declared at all.
+Not every difference between two sources is misbehavior. A source that is subject to a data-residency obligation may serve a different endpoint by design, and a procedure that reports every such difference as equivocation fires on normal operation. Section 9 admits this without conceding anything: a source may declare, in advance, an axis a third party can independently occupy along which it varies a field. A declaration so made **annotates** a finding and never withdraws it — the disagreement still stands and the verdict is unchanged — while a source that varies contrary to its own declaration earns a stronger finding than one that never declared at all.
 
 The procedure serves any layer at which a middleman answers questions about an agent: discovery (which endpoint), identity (which key), capability (which functions), and evidence (which records exist). Section 11 gives the two reference layer instantiations.
 
@@ -125,9 +125,9 @@ The procedure serves any layer at which a middleman answers questions about an a
 
 {::boilerplate bcp14-tagged}
 
-**Source:** Anything that answers "what do you have for agent X?": a registry, a name service, a DID method, a catalog, an evidence store.
+**Source:** Anything that answers "what do you have for agent X?" — a registry, a name service, a DID method, a catalog, an evidence store.
 
-**Vantage:** The observation context under which a source is observed: the conditions the claim was obtained under, not the observing instance. Two sweeps of one source from two hosts in the same context bear the same vantage. One source MAY be observed from multiple vantages; vantage is part of a claim's identity. Identifiers are constrained by Section 3.1.
+**Vantage:** The observation context under which a source is observed — the conditions the claim was obtained under, not the observing instance. Two sweeps of one source from two hosts in the same context bear the same vantage. One source MAY be observed from multiple vantages; vantage is part of a claim's identity. Identifiers are constrained by Section 3.1.
 
 **Answer Scope:** A source-signed bundle declaring, in advance, which fields that source varies and along which vantage class (Section 9).
 
@@ -161,29 +161,29 @@ A vantage identifier MUST be either null or a string of the form `class ":" valu
 
 This document defines two initial occupiable classes. Both take their value space from an external registry, which is what makes shared denotation (below) a fact rather than an agreement between sweepers:
 
-- **`region`**: the value MUST be an ISO 3166-1 alpha-2 code {{ISO3166}}, lowercased. `region:de`, `region:us`, and the exceptionally reserved `region:eu` are well-formed.
-- **`asn`**: the value MUST be the string `as` followed by the decimal representation of a 32-bit Autonomous System Number {{RFC6793}}, with no leading zeros: `asn:as64500`.
+- **`region`** — the value MUST be an ISO 3166-1 alpha-2 code {{ISO3166}}, lowercased. `region:de`, `region:us`, and the exceptionally reserved `region:eu` are well-formed.
+- **`asn`** — the value MUST be the string `as` followed by the decimal representation of a 32-bit Autonomous System Number {{RFC6793}}, with no leading zeros: `asn:as64500`.
 
 A class outside this set MUST NOT be used unless the deployments comparing observations have agreed on both its meaning and its value space; absent that agreement the requirements below cannot be met and the vantage MUST be null.
 
 Comparison scoped to a vantage (Section 6.2) is sound only if independently operated sweepers assign the same identifier to the same context. Accordingly:
 
 - **Shared denotation.** Two claims bearing the same identifier MUST denote the same observation context, whichever source or sweeper produced them. A sweeper MUST NOT mint a private meaning for a `class` defined elsewhere.
-- **Occupiability.** A `class` MUST be one a third party can construct and observe from independently. `region` and `asn` are occupiable: a verifier can place itself in that region or on that network and repeat the observation. Attributes of the caller *relationship* rather than of the observation, caller identity, tenant, subscription tier, authorization level, are NOT occupiable and MUST NOT be encoded as a vantage. **This rule is central:** a variation on a non-occupiable attribute cannot be independently checked, so a corroborator that credited a declaration of one would be reporting the source's own assertion back as evidence.
+- **Occupiability.** A `class` MUST be one a third party can construct and observe from independently. `region` and `asn` are occupiable: a verifier can place itself in that region or on that network and repeat the observation. Attributes of the caller *relationship* rather than of the observation — caller identity, tenant, subscription tier, authorization level — are NOT occupiable and MUST NOT be encoded as a vantage. **This rule is central:** a variation on a non-occupiable attribute cannot be independently checked, so a corroborator that credited a declaration of one would be reporting the source's own assertion back as evidence.
 - **Non-overlap.** Within one sweep the vantages a sweeper uses MUST NOT overlap: no context may be denoted by two identifiers, and no identifier by two contexts. A sweeper that cannot guarantee this MUST use null.
-- **Cardinality.** A `class` MUST have a small, enumerable value set. A high-cardinality dimension partitions observations until nothing is compared against anything, degrading corroboration to silence while appearing to function.
+- **Cardinality.** A `class` MUST have a small, enumerable value set — a high-cardinality dimension partitions observations until nothing is compared against anything, degrading corroboration to silence while appearing to function.
 
-The null vantage asserts no context. It is not a comparable identifier and MUST NOT be compared for equality against a non-null one as though it named one. It is correct for a single-vantage sweeper and REQUIRED where the obligations above cannot be met, declining to name a context is always sound, whereas naming one wrongly is not.
+The null vantage asserts no context. It is not a comparable identifier and MUST NOT be compared for equality against a non-null one as though it named one. It is correct for a single-vantage sweeper and REQUIRED where the obligations above cannot be met — declining to name a context is always sound, whereas naming one wrongly is not.
 
 # Classifying One Claim
 
 For a source S, vantage V, and agent A, a resolver MUST classify the outcome as exactly one of:
 
-- **`present`**: S served a claim for A, reduced to a view (Section 5).
-- **`absent`**: S positively asserts A is unknown. Each resolver defines the positive-absence predicate for its source type; for HTTP sources a `404` MUST be classified `absent`, and a `200` whose body positively signals not-found SHOULD be classified `absent`. Non-normative examples of the latter include `{"success": false}` bodies and error strings containing "not found".
-- **`error`**: any other outcome: connection failure, timeout, non-absence error status, unparseable body, or an answer that the resolver cannot map to a view.
+- **`present`** — S served a claim for A, reduced to a view (Section 5).
+- **`absent`** — S positively asserts A is unknown. Each resolver defines the positive-absence predicate for its source type; for HTTP sources a `404` MUST be classified `absent`, and a `200` whose body positively signals not-found SHOULD be classified `absent`. Non-normative examples of the latter include `{"success": false}` bodies and error strings containing "not found".
+- **`error`** — any other outcome: connection failure, timeout, non-absence error status, unparseable body, or an answer that the resolver cannot map to a view.
 
-A resolver MUST return an `error` claim rather than propagate an unclassified failure to the diff procedure. An `error` claim MUST be excluded from the diff entirely. This rule is central: **a source that failed to answer has asserted nothing and MUST NOT be treated as claiming absence**, otherwise every transient fault becomes a false omission finding.
+A resolver MUST return an `error` claim rather than propagate an unclassified failure to the diff procedure. An `error` claim MUST be excluded from the diff entirely. This rule is central: **a source that failed to answer has asserted nothing and MUST NOT be treated as claiming absence** — otherwise every transient fault becomes a false omission finding.
 
 # The View Contract
 
@@ -195,7 +195,7 @@ Where a field carries its own proof (a signed record's DID, a key), the resolver
 
 # The Diff
 
-Input: the claims of one sweep for one agent. The diff MUST be pure (deterministic ordering, no I/O, no exceptions) and MUST derive findings as follows. One agent MAY yield multiple simultaneous findings.
+Input: the claims of one sweep for one agent. The diff MUST be pure — deterministic ordering, no I/O, no exceptions — and MUST derive findings as follows. One agent MAY yield multiple simultaneous findings.
 
 ## omission
 
@@ -216,14 +216,14 @@ Emit a finding of `kind` equal to the field name, once per cohort, iff more than
 
 For each source observed from more than one vantage, if that source's vantages yield differing non-null values for any field, emit a `source_equivocation` finding attributing that source. Detail: `{source, field, values}` where `values` maps vantage labels to values. The finding is emitted whether or not the variation was declared (Section 9); its per-vantage values are carried in the record for audit.
 
-Absent an applicable Answer Scope, a source under `source_equivocation` for a field contributes no single agreed value to the Section 6.2 comparison for that field: a source that disagrees with itself cannot corroborate. Where an Answer Scope applies (Section 9.3), that withholding is **replaced, not waived**: the source's per-vantage values enter the cohort comparison of Section 6.2 instead. **This rule is central:** withholding the source without replacing it would let a source that declares variation serve one vantage a forged value and be recorded `AGREE`, because nothing would remain to compare that value against, strictly worse than not honouring the declaration at all.
+Absent an applicable Answer Scope, a source under `source_equivocation` for a field contributes no single agreed value to the Section 6.2 comparison for that field — a source that disagrees with itself cannot corroborate. Where an Answer Scope applies (Section 9.3), that withholding is **replaced, not waived**: the source's per-vantage values enter the cohort comparison of Section 6.2 instead. **This rule is central:** withholding the source without replacing it would let a source that declares variation serve one vantage a forged value and be recorded `AGREE`, because nothing would remain to compare that value against — strictly worse than not honouring the declaration at all.
 
 # Observation Time and Confirmation
 
 Sources propagate updates asynchronously; a legitimate change is served inconsistently for a bounded window. Every sweep MUST carry an `observed_at` timestamp, which is the observation time of every claim in that sweep; claims do not carry individual timestamps (Section 10). Every finding MUST carry a `confirmation` state:
 
-- **`suspected`**: first observation of the disagreement.
-- **`confirmed`**: the disagreement was re-observed in a sweep whose `observed_at` exceeds the first observation by at least the deployment's configured **staleness window**.
+- **`suspected`** — first observation of the disagreement.
+- **`confirmed`** — the disagreement was re-observed in a sweep whose `observed_at` exceeds the first observation by at least the deployment's configured **staleness window**.
 
 A deployment MUST configure exactly one staleness window, expressed in seconds, applied to every finding in every sweep it produces, and MUST record it in each Corroboration Record (Section 10). It is derived from the propagation characteristics of the sources swept (TTLs, sync intervals) and SHOULD be set from the slowest of them, since a window shorter than a source's real propagation time manufactures confirmed findings from ordinary delay. Per-source or per-pair windows are deliberately not provided: the record carries a single `staleness_window_s`, so a verifier re-deriving confirmation from recorded bytes has exactly one window to apply. A verifier evaluates confirmation deterministically from the recorded timestamps and the window recorded in the Corroboration Record; no external clock is consulted. Consumers SHOULD treat `suspected` findings as monitoring signals and `confirmed` findings as evidence.
 
@@ -280,9 +280,9 @@ An Answer Scope declares an **axis**, never a mapping. "`endpoint` varies by `re
 A verifier MUST reject a bundle unless all of the following hold.
 
 1. The signature verifies against the key `subject` encodes.
-2. `label` equals the label the bundle was retrieved from, by exact octet equality, with no normalization of scheme, case, port, or trailing path. **This rule is central:** a valid signature establishes that the holder of the `subject` key authored the bundle; it does not, by itself, establish control of any particular source label. Serving the bundle at the label is what supplies that evidence. Inferring equivalence between spellings would let one naming convention acquire authority over another.
+2. `label` equals the label the bundle was retrieved from, by exact octet equality — no normalization of scheme, case, port, or trailing path. **This rule is central:** a valid signature establishes that the holder of the `subject` key authored the bundle; it does not, by itself, establish control of any particular source label. Serving the bundle at the label is what supplies that evidence. Inferring equivalence between spellings would let one naming convention acquire authority over another.
 3. Every `vantage_class` is occupiable (Section 3.1). A verifier MUST maintain an explicit set of classes it accepts and MUST reject any other; widening that set is a deliberate act.
-4. Every `field` and `vantage_class` matches the token grammar of Section 3.1. Wildcards and catch-alls MUST be rejected at the token level, irrespective of the accepted class set, the permissive form of a declared-scope mechanism is what becomes its attack surface.
+4. Every `field` and `vantage_class` matches the token grammar of Section 3.1. Wildcards and catch-alls MUST be rejected at the token level, irrespective of the accepted class set — the permissive form of a declared-scope mechanism is what becomes its attack surface.
 5. No `field` appears twice. Overlapping scopes would let an operator select, after the fact, whichever applies.
 6. `scopes` carries no more entries than the verifier's configured maximum.
 
@@ -305,15 +305,15 @@ An implementation MUST record, in every annotated finding, which `seq` of the de
 
 ## scope_violation
 
-A source that varies a field contrary to an Answer Scope it *previously* published, most plainly one whose scope asserted no variation, is not merely exhibiting an undeclared divergence. It has published a constraint and violated it. A corroborator MUST emit a `scope_violation` finding attributing that source. Detail: `{source, field, declared_class, observed, declaration_version}`.
+A source that varies a field contrary to an Answer Scope it *previously* published — most plainly, one whose scope asserted no variation — is not merely exhibiting an undeclared divergence. It has published a constraint and violated it. A corroborator MUST emit a `scope_violation` finding attributing that source. Detail: `{source, field, declared_class, observed, declaration_version}`.
 
-**The temporal rule is not optional.** A corroborator MUST NOT emit `scope_violation` unless it can establish that the scope it evaluated was published *before* the observation it contradicts. Section 9.4 prevents a source retroactively legitimizing a past divergence by publishing a broader scope; the same reasoning applies in the opposite direction, and with a different victim. Without the temporal rule, a narrower scope published after the fact, by the source under duress, or by anyone who can influence what a sweeper fetches, manufactures an accusation about an observation that did not violate anything at the time it was made. Establishing publication order requires a witnessed history of what a source published when, which this document places out of scope (Section 14); until a deployment has one, it MUST NOT emit this kind.
+**The temporal rule is not optional.** A corroborator MUST NOT emit `scope_violation` unless it can establish that the scope it evaluated was published *before* the observation it contradicts. Section 9.4 prevents a source retroactively legitimizing a past divergence by publishing a broader scope; the same reasoning applies in the opposite direction, and with a different victim. Without the temporal rule, a narrower scope published after the fact — by the source under duress, or by anyone who can influence what a sweeper fetches — manufactures an accusation about an observation that did not violate anything at the time it was made. Establishing publication order requires a witnessed history of what a source published when, which this document places out of scope (Section 14); until a deployment has one, it MUST NOT emit this kind.
 
 This is the strongest accusation the procedure makes, and it is available only because the declaration precedes the observation. An implementation that cannot demonstrate that ordering has not earned the accusation.
 
 # The Corroboration Record
 
-An implementation MUST emit a Corroboration Record for every (sweep, subject) pair, **whatever the verdict**, `AGREE`, `DIVERGENT`, or `INSUFFICIENT`. A corroboration trail recording only disagreements cannot prove its checks ran; the agreement record is the positive attestation downstream consumers bind.
+An implementation MUST emit a Corroboration Record for every (sweep, subject) pair, **whatever the verdict** — `AGREE`, `DIVERGENT`, or `INSUFFICIENT`. A corroboration trail recording only disagreements cannot prove its checks ran; the agreement record is the positive attestation downstream consumers bind.
 
 ~~~
 {
@@ -350,14 +350,14 @@ Rules:
 5. A consumer binding a Corroboration Record from another evidence format SHOULD bind `record_id` and SHOULD state the verdict it relied upon.
 5a. The verdict MUST be computed as follows, and only as follows. The verdict is `INSUFFICIENT` if and only if the record contains fewer than two `present`-or-`absent` claims. Otherwise the verdict is `DIVERGENT` if and only if `findings` is non-empty, and `AGREE` otherwise. A `declared` annotation on a finding (Section 9.4) does not affect this computation.
 5b. `observed_at` is the observation time of every claim in the record. Claims do not carry individual timestamps; a deployment whose sweeps span a period long enough for that to matter SHOULD shorten its sweeps rather than reinterpret this field (Section 14).
-6. `declared` MUST be present on every finding, defaulting to `false`; `declaration_version` MUST carry the matched `seq` when `declared` is `true` and MUST be null otherwise. Neither member participates in any dedup or first-observation key a consumer maintains, they describe what the source had published, not which disagreement was observed, and a source publishing or revising a declaration MUST NOT change the identity of a finding already being tracked.
+6. `declared` MUST be present on every finding, defaulting to `false`; `declaration_version` MUST carry the matched `seq` when `declared` is `true` and MUST be null otherwise. Neither member participates in any dedup or first-observation key a consumer maintains — they describe what the source had published, not which disagreement was observed, and a source publishing or revising a declaration MUST NOT change the identity of a finding already being tracked.
 7. A verifier MUST check `version` against the set of record versions it accepts and MUST reject any other. A verifier consuming records issued before this revision MUST accept `corroboration/0.1` alongside `corroboration/0.2`; the added members are the only difference, and their absence is read as `declared: false`.
 
 # Reference Layer Instantiations
 
-**Discovery**: view `{endpoint, did}`. Resolvers: a by-id HTTP registry resolver (`GET {base}/api/agents/{id}`, path injectable); a two-hop index resolver (resolve a locator to `{registry_url, identifier}`, then fetch the record; a missing or empty hop field yields an `error` claim, a not-found at either hop is `absent`). The `did` field is populated only per Section 5's verified-field rule, from a signed record verified offline against its embedded `did:key`, with subject binding to the outer id.
+**Discovery** — view `{endpoint, did}`. Resolvers: a by-id HTTP registry resolver (`GET {base}/api/agents/{id}`, path injectable); a two-hop index resolver (resolve a locator to `{registry_url, identifier}`, then fetch the record; a missing or empty hop field yields an `error` claim, a not-found at either hop is `absent`). The `did` field is populated only per Section 5's verified-field rule, from a signed record verified offline against its embedded `did:key`, with subject binding to the outer id.
 
-**Identity**: view `{key}`, the agent's Ed25519 verification key, represented in `did:key` multibase form (the encoding shared by `did:key` identifiers and `Ed25519VerificationKey2020` {{EDSIG2020}} `publicKeyMultibase`, so keys compare as strings). Resolvers: `did:key` (offline; the self-certifying root), `did:web` (fetched from the method-specified document location; `404` is `absent`), and a Universal Resolver adapter. A method serving a different key than the root is a `key` divergence.
+**Identity** — view `{key}`, the agent's Ed25519 verification key, represented in `did:key` multibase form (the encoding shared by `did:key` identifiers and `Ed25519VerificationKey2020` {{EDSIG2020}} `publicKeyMultibase`, so keys compare as strings). Resolvers: `did:key` (offline; the self-certifying root), `did:web` (fetched from the method-specified document location; `404` is `absent`), and a Universal Resolver adapter. A method serving a different key than the root is a `key` divergence.
 
 # Finding Kinds and Extensibility
 
@@ -367,7 +367,7 @@ Kinds seeded by this document: `omission`, `source_equivocation`, `scope_violati
 
 A conforming implementation MUST reproduce, for the shared corpus of fixed per-claim inputs, the exact finding set of Section 6 and the exact verdicts of Section 10, including: agreement yields no findings and an `AGREE` record; present-beside-absent yields `omission` with correct attribution; distinct field values yield that field's kind; an `error` claim is excluded and creates no omission; a positive soft 404 is `absent`; vantage disagreement within one source yields `source_equivocation` and, absent an applicable Answer Scope, withholds that source from the cross-source field comparison; where an Answer Scope applies, that finding is annotated `declared` and the source's per-vantage values enter the cohort comparison instead; one subject may carry multiple simultaneous findings; and every sweep yields a record whose `record_id` recomputes. The corpus is view-agnostic and reused by every layer.
 
-Answer Scope support is OPTIONAL. An implementation that does not support it conforms: with no declaration supplied, Section 6.2 yields a single cohort spanning every claim, and the procedure is identical to one with no notion of declaration. An implementation that *does* support it MUST NOT report `AGREE` for a sweep in which a declared-varying source's cohort disagrees, the redirection of Section 6.3 is not optional for an implementation that honors declarations at all, because honouring the declaration without it is strictly less safe than ignoring the declaration.
+Answer Scope support is OPTIONAL. An implementation that does not support it conforms: with no declaration supplied, Section 6.2 yields a single cohort spanning every claim, and the procedure is identical to one with no notion of declaration. An implementation that *does* support it MUST NOT report `AGREE` for a sweep in which a declared-varying source's cohort disagrees — the redirection of Section 6.3 is not optional for an implementation that honors declarations at all, because honouring the declaration without it is strictly less safe than ignoring the declaration.
 
 # Security Considerations
 
@@ -379,15 +379,15 @@ Answer Scope support is OPTIONAL. An implementation that does not support it con
 
 **Watch-set bootstrap.** A consumer cannot detect omission of an agent it never watched; a watch set enumerated from a single source inherits that source's omissions. Watch-set construction SHOULD draw on multiple sources.
 
-**Sweeper honesty.** A record attests the sweep's recorded observations, not the sweeper's honesty; a dishonest sweeper can sign a fiction. Anchoring bounds timing and prevents silent substitution; consumers with high assurance requirements SHOULD corroborate the corroborator, multiple independent sweepers over the same watch set, which this procedure supports without modification (sweep records are themselves views to diff).
+**Sweeper honesty.** A record attests the sweep's recorded observations, not the sweeper's honesty; a dishonest sweeper can sign a fiction. Anchoring bounds timing and prevents silent substitution; consumers with high assurance requirements SHOULD corroborate the corroborator — multiple independent sweepers over the same watch set — which this procedure supports without modification (sweep records are themselves views to diff).
 
 **Staleness abuse.** An attacker aware of the staleness window can rotate lies faster than confirmation. `suspected` findings therefore MUST be preserved in records even when never confirmed; a pattern of unconfirmed, short-lived divergences from one source is itself signal, and its evaluation is consumer policy.
 
 **Self-description replay and squatting.** Addressed structurally in Section 8 (supersession, corroborated distribution, verify-back); implementations MUST NOT skip the verify-back rule, which is the sole defense against alias squatting manufacturing false divergences.
 
-**Self-issued declarations.** In every deployed mechanism this procedure draws on, the party authorizing variation is not the party exhibiting it: a parent zone, a parent CA, the subject, or a standards body sets the tolerance. An Answer Scope inverts that, the source declares its own. A declaration is therefore not evidence of legitimacy and MUST NOT be treated as any; it is evidence only of what the source committed to in advance, which is precisely what makes Section 9.5 possible. Occupiability (Section 3.1) is the structural defense: a declaration on an axis a verifier can occupy is falsifiable by observation, while one on an axis it cannot is unfalsifiable self-attestation, which is why this document forbids the latter outright rather than discouraging it. Deployments SHOULD treat a source that declares broadly as less corroborative, not as more compliant.
+**Self-issued declarations.** In every deployed mechanism this procedure draws on, the party authorizing variation is not the party exhibiting it: a parent zone, a parent CA, the subject, or a standards body sets the tolerance. An Answer Scope inverts that — the source declares its own. A declaration is therefore not evidence of legitimacy and MUST NOT be treated as any; it is evidence only of what the source committed to in advance, which is precisely what makes Section 9.5 possible. Occupiability (Section 3.1) is the structural defense: a declaration on an axis a verifier can occupy is falsifiable by observation, while one on an axis it cannot is unfalsifiable self-attestation, which is why this document forbids the latter outright rather than discouraging it. Deployments SHOULD treat a source that declares broadly as less corroborative, not as more compliant.
 
-**Observer distinguishability.** A source able to identify the corroborator (by network origin, credential, query shape, or timing) can serve the corroborator its declared answer and other consumers something else, and the procedure records the declared case. Occupiability bounds this but does not eliminate it: it guarantees a verifier *can* occupy the declared context, not that it is indistinguishable from an ordinary caller while there. Deployments SHOULD sweep from origins not attributable to the sweeping party, and consumers SHOULD weight a declaration lower where the source could plausibly identify the observer. This residual is the one described under **Residual equivocation** and has the same eventual answer: witnessed, append-only logs of served answers.
+**Observer distinguishability.** A source able to identify the corroborator — by network origin, credential, query shape, or timing — can serve the corroborator its declared answer and other consumers something else, and the procedure records the declared case. Occupiability bounds this but does not eliminate it: it guarantees a verifier *can* occupy the declared context, not that it is indistinguishable from an ordinary caller while there. Deployments SHOULD sweep from origins not attributable to the sweeping party, and consumers SHOULD weight a declaration lower where the source could plausibly identify the observer. This residual is the one described under **Residual equivocation** and has the same eventual answer: witnessed, append-only logs of served answers.
 
 **Privacy.** A watch set reveals the sweeping party's interests to every queried source; records reveal them to every consumer. Deployments handling sensitive watch sets SHOULD consider query padding and record-level access control; both are out of scope.
 
@@ -423,7 +423,7 @@ Editorial and precision changes throughout, following review:
 
 # Mapping to the Reference Implementation
 
-Every normative element of this document is implemented in the reference implementation, split across two packages: the source-agnostic **sm-resolver** kernel (the claim model of Section 3, the view contract of Section 5, the diff of Section 6, and the confirmation discipline of Section 7, producing an unsigned sweep result with the verdict of Section 10) and **sm-divergence** built on it (the reference discovery and identity layers of Section 11, the agent self-description of Section 8, and the signing that seals a sweep result into the Corroboration Record of Section 10). The `present`/`absent`/`error` classification (Section 4), the view contract (Section 5), and the diff (Section 6) are the kernel's stable core; the vantage axis and `source_equivocation` (Sections 3, 6.3), observation time and confirmation (Section 7), the self-description schema and hardening (Section 8), and the Corroboration Record emitted on every verdict (Section 10) are all present and covered by the conformance corpus. The Answer Scope of Section 9 is split the same way: the kernel accepts an already-verified declaration as inert data and performs the cohort comparison of Section 6.2, while fetching, verifying and matching the bundle belong to the layer above, the kernel holds no keys and performs no I/O.
+Every normative element of this document is implemented in the reference implementation, split across two packages: the source-agnostic **sm-resolver** kernel (the claim model of Section 3, the view contract of Section 5, the diff of Section 6, and the confirmation discipline of Section 7, producing an unsigned sweep result with the verdict of Section 10) and **sm-divergence** built on it (the reference discovery and identity layers of Section 11, the agent self-description of Section 8, and the signing that seals a sweep result into the Corroboration Record of Section 10). The `present`/`absent`/`error` classification (Section 4), the view contract (Section 5), and the diff (Section 6) are the kernel's stable core; the vantage axis and `source_equivocation` (Sections 3, 6.3), observation time and confirmation (Section 7), the self-description schema and hardening (Section 8), and the Corroboration Record emitted on every verdict (Section 10) are all present and covered by the conformance corpus. The Answer Scope of Section 9 is split the same way: the kernel accepts an already-verified declaration as inert data and performs the cohort comparison of Section 6.2, while fetching, verifying and matching the bundle belong to the layer above — the kernel holds no keys and performs no I/O.
 
 The reference implementation is available as open-source software (MIT License) at https://github.com/Sharathvc23/sm-divergence and https://github.com/Sharathvc23/sm-resolver, and is published on PyPI as `sm-divergence` and `sm-resolver`. The companion informative essay is "The Quilt That Checks Itself" (Stellarminds.ai / Project NANDA research).
 

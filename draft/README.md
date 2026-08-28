@@ -7,12 +7,25 @@ Agent Discovery*.
 
 | | Status |
 | --- | --- |
-| `-00` | **Submitted.** Published at <https://www.ietf.org/archive/id/draft-chandra-agent-registry-corroboration-00.txt>. Expires 2027-01-05. |
-| `-01` | Current. **Not submitted.** |
+| `-00` | Submitted 2026-07-04. Superseded. Expires 2027-01-05. |
+| `-01` | **Submitted 2026-08-27. Current.** Expires 2027-02-28. |
 
-Both are committed here. `-00` is the revision with standing — it is what the
-published URL serves and what any diff of the revisions is against — and it was
-previously kept only as loose files outside version control.
+- Datatracker: <https://datatracker.ietf.org/doc/draft-chandra-agent-registry-corroboration/>
+- HTML: <https://datatracker.ietf.org/doc/html/draft-chandra-agent-registry-corroboration>
+- `-01` text: <https://www.ietf.org/archive/id/draft-chandra-agent-registry-corroboration-01.txt>
+
+**The files here are the bytes that were submitted.** `-01` was verified
+byte-identical to what the IETF serves; do not rebuild them in place. A rebuild
+changes the date line and therefore the expiry, and the published revision is
+immutable.
+
+## Pending for -02
+
+An ASCII cleanup was prepared after `-01` was submitted and is **not** part of
+the published revision: all 80 em dashes converted to commas, colons and
+parentheses, which removes the non-ASCII warnings idnits reports and follows the
+IETF preference for those forms. It is in commit `dcf788b` and should be the
+starting point for `-02` rather than being re-done.
 
 The `.mkd` is authoritative. Rebuild with:
 
