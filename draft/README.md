@@ -3,10 +3,16 @@
 `draft-chandra-agent-registry-corroboration` — *Multi-Source Corroboration for AI
 Agent Discovery*.
 
-`-01` is the current revision and is **not yet submitted** to the datatracker.
-`-00` was submitted and is at
-<https://www.ietf.org/archive/id/draft-chandra-agent-registry-corroboration-00.txt>;
-it expires 2027-01-05.
+## Revisions
+
+| | Status |
+| --- | --- |
+| `-00` | **Submitted.** Published at <https://www.ietf.org/archive/id/draft-chandra-agent-registry-corroboration-00.txt>. Expires 2027-01-05. |
+| `-01` | Current. **Not submitted.** |
+
+Both are committed here. `-00` is the revision with standing — it is what the
+published URL serves and what any diff of the revisions is against — and it was
+previously kept only as loose files outside version control.
 
 The `.mkd` is authoritative. Rebuild with:
 
