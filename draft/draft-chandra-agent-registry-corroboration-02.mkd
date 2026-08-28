@@ -1,7 +1,7 @@
 ---
 title: Multi-Source Corroboration for AI Agent Discovery
 abbrev: Agent Discovery Corroboration
-docname: draft-chandra-agent-registry-corroboration-01
+docname: draft-chandra-agent-registry-corroboration-02
 category: std
 ipr: trust200902
 area: Security
