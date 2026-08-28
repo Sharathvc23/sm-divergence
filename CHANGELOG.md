@@ -38,7 +38,7 @@ Tracks `draft-chandra-agent-registry-corroboration-02` (in preparation).
   failure `ACCEPTED_RECORD_VERSIONS` exists to prevent, arriving through a
   different door. Caught by running the full suite, and now pinned by a test.
 
-- Requires `sm-resolver` >= 0.4 (the seeded outcome vocabulary).
+- Requires `sm-resolver` >= 0.5 (the seeded outcome vocabulary; 0.4.0 is skipped — its protocol change type-broke consumers and was corrected in 0.5.0).
 
 ## [0.9.0] — 2026-08-27
 
