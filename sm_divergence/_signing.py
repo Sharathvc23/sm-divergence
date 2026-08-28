@@ -57,6 +57,36 @@ def rfc3339(observed_at: float) -> str:
     return datetime.fromtimestamp(int(observed_at), tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# The signature algorithm, named with its JOSE/COSE identifier. A did:key already
+# encodes the key type in its multicodec prefix, so the algorithm was always
+# discoverable; naming it makes a verifier's obligation explicit and makes adding
+# a second algorithm a change a reader can see.
+ALG_ED25519 = "EdDSA"
+
+# Multicodec prefix -> algorithm. Extending this is how a second algorithm is
+# introduced: the prefix identifies the key type, so a record cannot claim one
+# algorithm while carrying a key for another.
+_ALG_BY_MULTICODEC: dict[bytes, str] = {_ED25519_MULTICODEC: ALG_ED25519}
+
+
+def alg_from_did_key(did: str) -> str | None:
+    """The signature algorithm the ``did:key`` implies, or None if unrecognised.
+
+    This is what makes an ``alg`` member safe. A verifier that reads ``alg`` and
+    trusts it has gained a downgrade vector, not agility: the record could claim
+    one algorithm while the signature was made with another. The key type is
+    authoritative and ``alg`` must agree with it.
+    """
+    _require()
+    if not did.startswith("did:key:z"):
+        return None
+    try:
+        raw = base58.b58decode(did[len("did:key:z") :])
+    except Exception:
+        return None
+    return _ALG_BY_MULTICODEC.get(bytes(raw[:2]))
+
+
 def pubkey_from_did_key(did: str) -> bytes | None:
     """The 32-byte Ed25519 public key a ``did:key`` encodes, or None."""
     _require()

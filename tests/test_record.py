@@ -41,6 +41,7 @@ def test_record_has_paper_shape_and_roundtrips() -> None:
 
     assert set(record) == {
         "version",
+        "alg",
         "record_id",
         "subject",
         "observed_at",
@@ -51,7 +52,7 @@ def test_record_has_paper_shape_and_roundtrips() -> None:
         "sweeper",
         "signature",
     }
-    assert record["version"] == "corroboration/0.2"
+    assert record["version"] == "corroboration/0.3"
     assert record["verdict"] == "DIVERGENT"
     assert record["subject"] == {"agent_id": "x", "did": None}
     assert record["observed_at"] == "2025-07-04T03:33:20Z"
@@ -180,4 +181,4 @@ def test_a_missing_version_is_rejected() -> None:
 
 def test_records_are_built_at_the_current_version() -> None:
     record = build_corroboration_record(_divergent_sweep(), sweeper_private_key=_sweeper_key())
-    assert record["version"] == "corroboration/0.2"
+    assert record["version"] == "corroboration/0.3"
