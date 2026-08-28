@@ -9,7 +9,7 @@ Expires: 1 March 2027
 
 
            Multi-Source Corroboration for AI Agent Discovery
-             draft-chandra-agent-registry-corroboration-01
+             draft-chandra-agent-registry-corroboration-02
 
 Abstract
 
