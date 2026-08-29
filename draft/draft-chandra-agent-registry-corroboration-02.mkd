@@ -95,19 +95,15 @@ informative:
 
 --- abstract
 
-AI agents are discovered and identified through independent sources, including
-registries, name services, DID methods, and catalogs. A single source can
-misrepresent an agent by omission, withholding a record it holds, or by
-equivocation, serving different answers to different observers. A signature on a
-served artifact does not, by itself, defend against either behavior. This
-document specifies a corroboration procedure that classifies one source's claim
-about one agent observed from one network vantage; reduces claims to comparable
-views; diffs claims into findings with deterministic attribution; distinguishes
-legitimate propagation delay from persistent disagreement; and emits a signed
-Corroboration Record for every sweep, including agreement, that other evidence
-formats can bind by digest. The procedure is source-, format-, and layer-agnostic;
-requires neither cooperation from nor modification of any source; and is
-verifiable from recorded bytes.
+AI agent discovery depends on sources such as registries, name services, DID
+methods, and catalogs. A valid signature on an artifact does not by itself show
+that a source has not withheld a record, or served inconsistent records to
+different observers. This document specifies a source- and format-agnostic
+procedure for corroborating independent observations of an agent. It defines
+claim classification, canonical views, deterministic disagreement findings,
+multi-vantage equivocation detection, propagation-delay confirmation, and signed
+Corroboration Records. The procedure produces verifiable evidence for every
+sweep, including agreement and insufficient-observation results.
 
 --- middle
 
@@ -126,6 +122,12 @@ The procedure serves any layer at which a middleman answers questions about an a
 {::boilerplate bcp14-tagged}
 
 **Source:** Anything that answers "what do you have for agent X?": a registry, a name service, a DID method, a catalog, an evidence store.
+
+**Source label:** The identifier under which a source appears in claims, findings and records. A label MUST be a URI {{RFC3986}}, MUST be stable for the lifetime of the source, and MUST be unique within the deployment that produced the record.
+
+Labels are compared by exact octet equality. An implementation MUST NOT normalize a label and MUST NOT infer that two labels denote the same source. The endpoint canonicalization of Section 5 applies to view *values*, never to labels: normalizing a label would let one source's identity merge with another's, which is the failure a corroborator exists to detect.
+
+**This document defines no global source-identity system.** A label is meaningful within the deployment that recorded it, and two deployments intending to compare records MUST agree on labels out of band. Where a source is served over HTTP the URI it is served from is the natural label, and the one an operator can demonstrate control of (Section 9.2); where it is not, any stable URI serves. No claim of global uniqueness is made or implied.
 
 **Vantage:** The observation context under which a source is observed: the conditions the claim was obtained under, not the observing instance. Two sweeps of one source from two hosts in the same context bear the same vantage. One source MAY be observed from multiple vantages; vantage is part of a claim's identity. Identifiers are constrained by Section 3.1.
 
@@ -211,7 +213,19 @@ Only the resolver knows why a resolve ended as it did, so supplying an outcome i
 
 A `present` claim MUST be reduced to a **view**: a mapping of field names to string values or null. A null value MUST NOT participate in the diff: an unverifiable or missing field is not a disagreement.
 
-Fields whose values are compared as strings MUST be canonicalized by the layer before entering the view, such that two references to the same resource compare equal. For URI-valued fields (e.g., endpoints), implementations MUST apply syntax-based normalization per RFC 3986 {{RFC3986}} Section 6 (case of scheme and host, default ports, empty path) before comparison. For key-valued fields whose layer defines a `did:key` representation, the multibase `did:key` form is the comparison encoding.
+Fields whose values are compared as strings MUST be canonicalized by the layer before entering the view, such that two references to the same resource compare equal and two references to different resources do not.
+
+RFC 3986 {{RFC3986}} Section 6 names syntax-based normalization but leaves several choices to the implementer, and two conforming implementations that choose differently produce a false field divergence between honest sources. URI-valued fields MUST therefore be canonicalized as follows, which this document identifies as `endpoint-normalization/0.1`:
+
+- The scheme and host are lowercased. **The path is not.** A path MAY address distinct resources by case, so folding it would merge two endpoints.
+- The default port for the scheme is removed; any other port is retained.
+- An empty path becomes `/`, and dot segments are removed per RFC 3986 Section 5.2.4.
+- Percent-encoding triplets are uppercased, and percent-encoded unreserved characters (RFC 3986 Section 2.3) are decoded. **Reserved characters remain encoded**: `%2F` is an encoded solidus, not a path separator, and decoding it would merge two endpoints.
+- The query is compared byte for byte. Its semantics belong to the origin server, and reordering or removing parameters would assert an equivalence this procedure cannot know holds.
+- The fragment is removed. It is not transmitted to the origin server and so cannot distinguish two endpoints as addresses.
+- Hostnames are compared in their A-label (punycode) form, and a trailing dot is removed.
+
+A value that is not a URI is compared unchanged. Guessing at a syntax the layer does not recognize is worse than comparing it literally.
 
 Where a field carries its own proof (a signed record's DID, a key), the resolver MUST populate it only from a successfully verified artifact whose subject binds to the outer agent identifier; on any verification failure the field is null. A verifier MUST NOT allow an unverified value to produce a divergence finding against a verified one (the no-laundering rule).
 
@@ -246,6 +260,28 @@ Sources propagate updates asynchronously; a legitimate change is served inconsis
 
 - **`suspected`**: first observation of the disagreement.
 - **`confirmed`**: the disagreement was re-observed in a sweep whose `observed_at` exceeds the first observation by at least the deployment's configured **staleness window**.
+
+## Finding Identity
+
+Confirmation asks whether a finding observed now is the *same disagreement* as one observed earlier. That comparison MUST use a stable identity, defined per finding kind:
+
+| Kind | Identity |
+| --- | --- |
+| `omission` | `present_on`, `missing_from` |
+| `source_equivocation` | `source`, `field` |
+| `scope_violation` | `source`, `field`, `declared_class` |
+| a view field name | `field`, the participating source labels, and the cohort |
+| any other kind | the whole `detail` |
+
+**Observed values MUST NOT participate in the identity.** Values change while the same disagreement persists, and keying on them makes a source that rotates its answer produce a stream of unrelated findings, each restarting as `suspected` and never reaching `confirmed`. That is the staleness abuse of Section 14, made worse: the pattern does not accumulate under one identity either, so even the count of short-lived divergences from one source is diluted.
+
+**The cohort MUST participate** wherever the comparison was scoped (Section 6.2). The same sources can disagree differently in two contexts, and without the cohort one of those disagreements masks the other.
+
+**A kind this document does not seed MUST key on the whole `detail`.** Its shape is not defined here, so no part of it may be assumed stable, including a `values` member, which such a kind may use to mean something else entirely.
+
+`confirmation` and the declaration state of Section 9.4 do not participate either.
+
+## The Staleness Window
 
 A deployment MUST configure exactly one staleness window, expressed in seconds, applied to every finding in every sweep it produces, and MUST record it in each Corroboration Record (Section 10). It is derived from the propagation characteristics of the sources swept (TTLs, sync intervals) and SHOULD be set from the slowest of them, since a window shorter than a source's real propagation time manufactures confirmed findings from ordinary delay. Per-source or per-pair windows are deliberately not provided: the record carries a single `staleness_window_s`, so a verifier re-deriving confirmation from recorded bytes has exactly one window to apply. A verifier evaluates confirmation deterministically from the recorded timestamps and the window recorded in the Corroboration Record; no external clock is consulted. Consumers SHOULD treat `suspected` findings as monitoring signals and `confirmed` findings as evidence.
 
@@ -331,6 +367,22 @@ A source that varies a field contrary to an Answer Scope it *previously* publish
 
 **The temporal rule is not optional.** A corroborator MUST NOT emit `scope_violation` unless it can establish that the scope it evaluated was published *before* the observation it contradicts. Section 9.4 prevents a source retroactively legitimizing a past divergence by publishing a broader scope; the same reasoning applies in the opposite direction, and with a different victim. Without the temporal rule, a narrower scope published after the fact, by the source under duress, or by anyone who can influence what a sweeper fetches, manufactures an accusation about an observation that did not violate anything at the time it was made. Establishing publication order requires a witnessed history of what a source published when, which this document places out of scope (Section 14); until a deployment has one, it MUST NOT emit this kind.
 
+A deployment that does have one records its evidence in the finding's `detail` under `history_proof`, so that the finding is independently auditable without this document standardizing any particular mechanism:
+
+~~~
+"history_proof": {
+  "type": "<namespaced mechanism identifier>",
+  "statement_digest": "<CORR-DIGEST of the Answer Scope relied upon>",
+  "proof": { ... mechanism-defined ... }
+}
+~~~
+
+`statement_digest` MUST equal the `scope_digest` of the corresponding entry in `answer_scopes` (Section 10). That binding is what makes the envelope evidence rather than an assertion: a proof about some other scope is evidence about something else, however valid it is in its own terms.
+
+`type` MUST be namespaced with a reverse-DNS or URI prefix. This document seeds no mechanisms, so every value belongs to a third party and a bare name would claim a reservation that does not exist.
+
+A verifier that does not recognize `type` MUST treat the finding as though no history proof were present, and therefore MUST NOT rely on the `scope_violation`. Checking the envelope is not checking the proof.
+
 This is the strongest accusation the procedure makes, and it is available only because the declaration precedes the observation. An implementation that cannot demonstrate that ordering has not earned the accusation.
 
 # The Corroboration Record
@@ -359,6 +411,11 @@ An implementation MUST emit a Corroboration Record for every (sweep, subject) pa
       "declaration_version": <integer or null>,
       "detail": { ... } }
   ],
+  "answer_scopes": [
+    { "label": "<source label>", "subject": "did:key:z6Mk...",
+      "seq": <integer>, "scope_digest": "<CORR-DIGEST>",
+      "scopes": [ { "field": "<name>", "vantage_class": "<class>" } ] }
+  ],
   "sweeper": "did:key:z6Mk...",
   "signature": "<base64 Ed25519 over JCS of all other members>"
 }
@@ -374,8 +431,9 @@ Rules:
 6. A consumer binding a Corroboration Record from another evidence format SHOULD bind `record_id` and SHOULD state the verdict it relied upon.
 7. The verdict MUST be computed as follows, and only as follows. The verdict is `INSUFFICIENT` if and only if the record contains fewer than two `present`-or-`absent` claims. Otherwise the verdict is `DIVERGENT` if and only if `findings` is non-empty, and `AGREE` otherwise. A `declared` annotation on a finding (Section 9.4) does not affect this computation.
 8. `observed_at` is the observation time of every claim in the record. Claims do not carry individual timestamps; a deployment whose sweeps span a period long enough for that to matter SHOULD shorten its sweeps rather than reinterpret this field (Section 14).
-9. `declared` MUST be present on every finding, defaulting to `false`; `declaration_version` MUST carry the matched `seq` when `declared` is `true` and MUST be null otherwise. Neither member participates in any dedup or first-observation key a consumer maintains, they describe what the source had published, not which disagreement was observed, and a source publishing or revising a declaration MUST NOT change the identity of a finding already being tracked.
-10. A verifier MUST check `version` against the set of record versions it accepts and MUST reject any other. A verifier consuming records issued before this revision MUST accept `corroboration/0.1` and `corroboration/0.2` alongside `corroboration/0.3`; for those versions the absence of `declared` is read as `false` and the absence of `alg` as `EdDSA`.
+9. `answer_scopes` MUST list every Answer Scope the sweep relied upon, and MUST be present and empty when it relied on none. "No scope applied" and "this implementation does not record scopes" are different facts, and a verifier that cannot distinguish them cannot know whether a record is complete. Each entry MUST carry `scope_digest`, the CORR-DIGEST of the verified bundle, and SHOULD carry `scopes`. **This rule is central:** `declared` with a sequence number states that a scope was matched without stating which rule was matched or which bytes the sequence refers to, so a verifier holding only the record could not reproduce the decision. The digest binds the decision to specific bytes; carrying `scopes` as well spares a verifier that does not already hold the bundle from a fetch, which is what offline verification exists to avoid. A finding with `declared: true` is re-derived by locating the entry whose `label` equals the finding's source and whose `seq` equals its `declaration_version`.
+10. `declared` MUST be present on every finding, defaulting to `false`; `declaration_version` MUST carry the matched `seq` when `declared` is `true` and MUST be null otherwise. Neither member participates in any dedup or first-observation key a consumer maintains, they describe what the source had published, not which disagreement was observed, and a source publishing or revising a declaration MUST NOT change the identity of a finding already being tracked.
+11. A verifier MUST check `version` against the set of record versions it accepts and MUST reject any other. A verifier consuming records issued before this revision MUST accept `corroboration/0.1` and `corroboration/0.2` alongside `corroboration/0.3`; for those versions the absence of `declared` is read as `false` and the absence of `alg` as `EdDSA`.
 
 # Reference Layer Instantiations
 
@@ -390,6 +448,24 @@ Kinds seeded by this document: `omission`, `source_equivocation`, `scope_violati
 # Conformance
 
 A conforming implementation MUST reproduce, for the shared corpus of fixed per-claim inputs, the exact finding set of Section 6 and the exact verdicts of Section 10, including: agreement yields no findings and an `AGREE` record; present-beside-absent yields `omission` with correct attribution; distinct field values yield that field's kind; an `error` claim is excluded and creates no omission; a positive soft 404 is `absent`; vantage disagreement within one source yields `source_equivocation` and, absent an applicable Answer Scope, withholds that source from the cross-source field comparison; where an Answer Scope applies, that finding is annotated `declared` and the source's per-vantage values enter the cohort comparison instead; one subject may carry multiple simultaneous findings; and every sweep yields a record whose `record_id` recomputes. The corpus is view-agnostic and reused by every layer.
+
+The corpus MUST include the following cases, which exercise the rules most likely to be implemented differently:
+
+| Case | Expected |
+| --- | --- |
+| one `present`, one `error` | `INSUFFICIENT`; no `omission` |
+| one `present`, one `absent`, one `error` | `DIVERGENT` with `omission`; the `error` claim preserved |
+| one source, two vantages, differing value, no scope | `source_equivocation`; that source withheld from the cross-source comparison |
+| the same, with an applicable `region` scope | `source_equivocation` annotated `declared`; per-vantage cohort comparison proceeds |
+| declared regional variation, values differing within one cohort | the field divergence is still emitted; verdict remains `DIVERGENT` |
+| a scope published after the observation | no `scope_violation`, whatever the scope says |
+| equal `seq`, differing self-description bytes | `agent_equivocation` |
+| endpoints differing only in host case, default port, empty path, dot segments, unreserved percent-encoding, or fragment | no field divergence |
+| endpoints differing in an encoded reserved character, path case, or query order | field divergence |
+| one verified and one unverifiable proof-carrying field | the unverifiable value is null and produces no divergence |
+| a scope whose `label` differs from the label it was served at only in case or a trailing solidus | the scope is rejected |
+| the same disagreement re-observed with changed values | the same finding identity; confirmation advances |
+| the same sources disagreeing in two cohorts | two findings, distinct identities |
 
 Answer Scope support is OPTIONAL. An implementation that does not support it conforms: with no declaration supplied, Section 6.2 yields a single cohort spanning every claim, and the procedure is identical to one with no notion of declaration. An implementation that *does* support it MUST NOT report `AGREE` for a sweep in which a declared-varying source's cohort disagrees, the redirection of Section 6.3 is not optional for an implementation that honors declarations at all, because honouring the declaration without it is strictly less safe than ignoring the declaration.
 
@@ -417,7 +493,7 @@ Answer Scope support is OPTIONAL. An implementation that does not support it con
 
 # IANA Considerations
 
-This document requests no IANA actions. The finding-kind vocabulary is governed by the namespacing convention of Section 12; this document defines the claim outcomes of Section 4.1 and defines `region` and `asn` as the initial occupiable vantage classes, with the value spaces given in Section 3.1, and a future revision MAY establish an IANA registry for further classes should the set need to grow outside this document and its successors; the record and self-description `version` strings are governed by this document and its successors. A future revision MAY register a media type for the Corroboration Record (candidate: `application/corroboration-record+json`) once transport contexts warrant it.
+This document requests no IANA actions. The finding-kind vocabulary is governed by the namespacing convention of Section 12; this document defines the claim outcomes of Section 4.1, the endpoint canonicalization profile `endpoint-normalization/0.1` of Section 5, and defines `region` and `asn` as the initial occupiable vantage classes, with the value spaces given in Section 3.1, and a future revision MAY establish an IANA registry for further classes should the set need to grow outside this document and its successors; the record and self-description `version` strings are governed by this document and its successors. A future revision MAY register a media type for the Corroboration Record (candidate: `application/corroboration-record+json`) once transport contexts warrant it.
 
 --- back
 
@@ -439,6 +515,13 @@ This document requests no IANA actions. The finding-kind vocabulary is governed 
 - **Section 13.** Conformance states that Answer Scope support is OPTIONAL and that an implementation without it conforms unchanged; an implementation with it MUST perform the redirection.
 - **Section 14.** Adds **Self-issued declarations** and **Observer distinguishability**.
 - **Section 15.** Defines `region` and `asn` as the initial occupiable vantage classes and notes an IANA registry as a future option.
+- **Section 2 (new definition).** A source label is defined: a URI, stable and unique within the deployment, compared by exact octet equality and never normalized. `-01` used labels throughout without saying what one is, while Section 9.2 relied on serving at a label to demonstrate control of it. The section also states plainly that this document defines no global source-identity system.
+- **Section 5.** URI canonicalization is pinned as `endpoint-normalization/0.1` rather than deferred to RFC 3986 Section 6, which leaves percent-encoding, dot-segments, empty-versus-root path, fragments and IDNA to the implementer. Two conforming implementations choosing differently produce a false field divergence between honest sources.
+- **Section 7 (new subsection).** Finding identity is defined per kind, and observed values are excluded from it. `-01` left it unspecified, and an implementation keying on values makes a source that rotates its answer restart as `suspected` forever, never reaching `confirmed`. The cohort participates, or the same sources disagreeing in two contexts collapse into one finding.
+- **Section 9.5.** Adds the `history_proof` envelope so a deployment holding a witnessed publication history can record it, bound by digest to the scope relied upon, without this document standardizing any mechanism.
+- **Section 10.** The record carries `answer_scopes`. `-01` recorded that a scope sequence was matched but not which rule or which bytes, so a declared finding could not be re-derived from the record, contradicting the property asserted throughout.
+- **Section 13.** Adds conformance cases for the rules most likely to be implemented differently.
+- **Appendix.** States that the implementation mapping is informative and that the body governs.
 
 Editorial and precision changes throughout, following review:
 
@@ -454,9 +537,12 @@ Editorial and precision changes throughout, following review:
 
 # Mapping to the Reference Implementation
 
+This appendix is informative. Where it differs from the body of this document, the normative requirements in the body govern; the reference implementation does not define behaviour.
+
+
 Every normative element of this document is implemented in the reference implementation, split across two packages: the source-agnostic **sm-resolver** kernel (the claim model of Section 3, the view contract of Section 5, the diff of Section 6, and the confirmation discipline of Section 7, producing an unsigned sweep result with the verdict of Section 10) and **sm-divergence** built on it (the reference discovery and identity layers of Section 11, the agent self-description of Section 8, and the signing that seals a sweep result into the Corroboration Record of Section 10). The `present`/`absent`/`error` classification (Section 4), the view contract (Section 5), and the diff (Section 6) are the kernel's stable core; the vantage axis and `source_equivocation` (Sections 3, 6.3), observation time and confirmation (Section 7), the self-description schema and hardening (Section 8), and the Corroboration Record emitted on every verdict (Section 10) are all present and covered by the conformance corpus. The Answer Scope of Section 9 is split the same way: the kernel accepts an already-verified declaration as inert data and performs the cohort comparison of Section 6.2, while fetching, verifying and matching the bundle belong to the layer above, the kernel holds no keys and performs no I/O.
 
-The reference implementation is available as open-source software (MIT License) at https://github.com/Sharathvc23/sm-divergence and https://github.com/Sharathvc23/sm-resolver, and is published on PyPI as `sm-divergence` and `sm-resolver`. This revision corresponds to `sm-resolver` 0.5.0 and `sm-divergence` 0.10.0. The companion informative essay is "The Quilt That Checks Itself" (Stellarminds.ai / Project NANDA research).
+The reference implementation is available as open-source software (MIT License) at https://github.com/Sharathvc23/sm-divergence and https://github.com/Sharathvc23/sm-resolver, and is published on PyPI as `sm-divergence` and `sm-resolver`. This revision corresponds to `sm-resolver` 0.6.0 and `sm-divergence` 0.11.0. The companion informative essay is "The Quilt That Checks Itself" (Stellarminds.ai / Project NANDA research).
 
 # Related Work {#related}
 
