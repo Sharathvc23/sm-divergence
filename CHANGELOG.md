@@ -4,6 +4,55 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] — 2026-08-28
+
+Three review findings on `-01`. Tracks
+`draft-chandra-agent-registry-corroboration-02` (in preparation).
+
+### Added
+
+- **`answer_scopes` on the Corroboration Record**, and `scope_evidence()` to
+  build it. `declared: true` with a sequence number said a scope was *allegedly*
+  matched; it did not say which `{field, vantage_class}` rule, or which bytes the
+  sequence referred to. A third party holding the record could not reproduce the
+  decision, which contradicts the property this format asserts throughout:
+  verifiable from recorded bytes.
+
+  Each entry carries `label`, `subject`, `seq`, `scope_digest` and `scopes`. The
+  digest is what makes it evidence rather than a restatement — a verifier already
+  holding a bundle can tell whether it is the one that was used. The contents are
+  carried too, because a verifier that does *not* hold it would otherwise have to
+  fetch it, and a fetch is what offline verification exists to avoid.
+
+  Present and empty when no scope was used: "no scope applied" and "this
+  implementation does not record scopes" are different facts.
+
+- **`verify_history_proof`** — the evidence envelope for prior publication.
+  `scope_violation` may not be raised without evidence that a scope predates the
+  observation it contradicts, and nothing here provides it. Leaving the
+  *interface* undefined too would mean a deployment that does have a witnessed
+  history has no interoperable way to record its proof.
+
+  The envelope is defined; the mechanism is not. What is checkable without
+  knowing the mechanism is the shape and the binding to specific scope bytes.
+  **Accepting the envelope is not accepting the proof**, and that boundary is
+  pinned by a test rather than left to a docstring.
+
+### Changed
+
+- **`endpoint-normalization/0.1`.** RFC 3986 Section 6 leaves percent-encoding,
+  dot-segments, empty-versus-root path, fragments and IDNA to the reader, so two
+  conforming implementations could disagree — and a disagreement here is a false
+  `endpoint` divergence between honest registries.
+
+  Now pinned: unreserved percent-escapes decoded and the rest uppercased,
+  dot-segments removed, fragment dropped, query byte-sensitive, hosts compared as
+  punycode with any trailing dot removed. The path stays case-sensitive; only the
+  scheme and host fold. `tests/test_endpoint_canonicalization.py` is the vector
+  set.
+
+- Requires `sm-resolver` >= 0.6 (finding identity excludes observed values).
+
 ## [0.10.0] — 2026-08-28
 
 The record names its signature algorithm, and the name is bound to the key.

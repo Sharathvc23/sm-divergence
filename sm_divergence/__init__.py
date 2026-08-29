@@ -107,7 +107,9 @@ from .identity import (
 from .licensing import (
     AnswerScope,
     build_answer_scope,
+    scope_evidence,
     verify_answer_scope,
+    verify_history_proof,
 )
 from .record import (
     ACCEPTED_RECORD_VERSIONS,
@@ -160,6 +162,8 @@ __all__ = [
     "OperatorDescription",
     "SelfDescription",
     "build_answer_scope",
+    "scope_evidence",
+    "verify_history_proof",
     "build_operator_description",
     "verify_answer_scope",
     "verify_operator_description",

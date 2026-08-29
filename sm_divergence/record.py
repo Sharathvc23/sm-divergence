@@ -28,6 +28,8 @@ member; ``record_id`` is the CORR-DIGEST of every member except itself and
       "claims":   [ { "source", "vantage", "status", "view", "outcome" }, … ],
       "findings": [ { "kind", "agent_id", "confirmation",
                       "declared", "declaration_version", "detail" }, … ],
+      "answer_scopes": [ { "label", "subject", "seq", "scope_digest",
+                           "scopes" }, … ],
       "sweeper": "did:key:z6Mk…",
       "signature": "<base64 Ed25519>"
     }
@@ -79,6 +81,7 @@ def build_corroboration_record(
     *,
     sweeper_private_key: bytes,
     did_for: DidFor | None = None,
+    answer_scopes: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Seal one ``SweepResult`` into a signed Corroboration Record.
 
@@ -99,6 +102,11 @@ def build_corroboration_record(
         "verdict": result.verdict,
         "claims": [_claim_entry(c) for c in result.claims],
         "findings": [f.to_dict() for f in result.findings],
+        # Present and empty when no scope was used. "No scope applied" and "this
+        # implementation does not record scopes" are different facts, and a
+        # verifier that cannot tell them apart cannot know whether a record
+        # without scopes is complete. See `licensing.scope_evidence`.
+        "answer_scopes": answer_scopes if answer_scopes is not None else [],
         "sweeper": sweeper,
     }
     signed = {**body, "record_id": _signing.corr_digest(body)}

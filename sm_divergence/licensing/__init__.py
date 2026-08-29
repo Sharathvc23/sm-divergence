@@ -7,8 +7,10 @@ from .answer_scope import (
     OCCUPIABLE_CLASSES,
     AnswerScope,
     build_answer_scope,
+    scope_evidence,
     verify_answer_scope,
 )
+from .history import verify_history_proof
 
 __all__ = [
     "ANSWER_SCOPE_VERSION",
@@ -16,5 +18,7 @@ __all__ = [
     "OCCUPIABLE_CLASSES",
     "AnswerScope",
     "build_answer_scope",
+    "scope_evidence",
+    "verify_history_proof",
     "verify_answer_scope",
 ]
