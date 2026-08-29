@@ -24,13 +24,29 @@ this library does — enough to turn a silently cheating source into a loudly
 diverging one. See the [whitepaper](WHITEPAPER.md) for the argument and the
 [spec](SPEC.md) for the normative procedure.
 
-This is the **reference implementation** of the IETF draft *Multi-Source
-Corroboration for AI Agent Discovery*
-(`draft-chandra-agent-registry-corroboration-00`): the
-[`sm-resolver`](https://pypi.org/project/sm-resolver/) kernel is the claim model
-and diff, and this package is the signing layer — the agent self-description
-(§8) and the signed [Corroboration Record](#the-corroboration-record) (§9) — plus
-the reference discovery and identity layers.
+This is the **reference implementation** of the IETF Internet-Draft
+[*Multi-Source Corroboration for AI Agent Discovery*](https://datatracker.ietf.org/doc/draft-chandra-agent-registry-corroboration/):
+the [`sm-resolver`](https://pypi.org/project/sm-resolver/) kernel is the claim
+model and diff, and this package is the signing layer — the agent
+self-description and the signed
+[Corroboration Record](#the-corroboration-record) — plus the reference discovery
+and identity layers.
+
+`-01` is the published revision. `-02` is prepared and is what this release
+implements: it adds the claim-outcome vocabulary and requires a record to name
+its signature algorithm. Both revisions and the diff between them are on the
+datatracker, and the text of each is committed under [`draft/`](draft/),
+byte-identical to what the IETF serves.
+
+Requires Python 3.11 or later. The core has no cryptography dependency;
+signing and verification live in the `attestation` extra, so you pull it only
+when you use it.
+
+> **Records carry their algorithm, bound to the key.** From
+> `corroboration/0.3` a record names its signature algorithm, and a verifier
+> derives the algorithm from the key type the sweeper's `did:key` encodes rather
+> than trusting the record. Records issued at earlier versions carry no such
+> member and remain verifiable.
 
 > **Not a transparency log.** Corroboration catches a source that disagrees with
 > its peers; it does not stop a *single* source lying *consistently* to a
@@ -275,6 +291,7 @@ make ci-local   # uv: sync → ruff → format → mypy --strict → pytest
 
 ---
 
-*First published: 2026-07-04 | Last modified: 2026-07-04*
+*First published: 2026-07-04 | Last modified: 2026-08-28*
 
-*Personal research contributions aligned with [Project NANDA](https://projectnanda.org) standards. [Stellarminds.ai](https://stellarminds.ai)*
+*Published by [Stellarminds.ai](https://stellarminds.ai) under the MIT licence.
+Aligned with [Project NANDA](https://projectnanda.org) standards.*
