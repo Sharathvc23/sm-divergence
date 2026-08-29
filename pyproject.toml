@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sm-divergence"
-version = "0.10.0"
+version = "0.11.0"
 description = "Catch a cheating registry by corroboration — omission/endpoint/DID + cross-DID-method key divergence for federated agent discovery, on the sm-resolver kernel."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,7 +13,7 @@ authors = [{ name = "Sharath (Stellarminds)" }]
 keywords = ["ai-agents", "nanda", "registry", "discovery", "federation", "accountability"]
 dependencies = [
     "httpx>=0.24",
-    "sm-resolver>=0.5",
+    "sm-resolver>=0.6",
 ]
 
 [project.optional-dependencies]

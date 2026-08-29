@@ -49,6 +49,7 @@ def test_record_has_paper_shape_and_roundtrips() -> None:
         "verdict",
         "claims",
         "findings",
+        "answer_scopes",
         "sweeper",
         "signature",
     }

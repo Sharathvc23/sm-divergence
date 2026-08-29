@@ -33,6 +33,7 @@ Requires the ``attestation`` extra (Ed25519 / did:key / JCS).
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -179,3 +180,44 @@ def verify_answer_scope(
     if label != served_from:
         return None
     return AnswerScope(subject=subject, label=label, seq=seq, scopes=scopes)
+
+
+def scope_evidence(scopes: Mapping[str, AnswerScope]) -> list[dict[str, Any]]:
+    """The record's ``answer_scopes``: what a verifier needs to re-derive a
+    declared finding.
+
+    ``declared: true`` with a sequence number says a scope was *allegedly*
+    matched. It does not say which ``{field, vantage_class}`` rule was matched,
+    nor which bytes sequence 7 refers to. A third party holding only the record
+    cannot reproduce the decision, which the record format otherwise claims
+    throughout: verifiable from recorded bytes.
+
+    Each entry carries ``label``, ``subject``, ``seq``, ``scope_digest`` and
+    ``scopes``. The digest is what makes this evidence rather than a
+    restatement — a verifier already holding a bundle can tell whether it is the
+    one that was used. The scope contents are carried too because a verifier that
+    does *not* hold the bundle would otherwise have to fetch it, and a fetch is
+    exactly what offline verification is meant to avoid.
+
+    Ordered by label, so the record is deterministic.
+    """
+    out: list[dict[str, Any]] = []
+    for label in sorted(scopes):
+        scope = scopes[label]
+        body = {
+            "version": ANSWER_SCOPE_VERSION,
+            "subject": scope.subject,
+            "label": scope.label,
+            "seq": scope.seq,
+            "scopes": [{"field": f, "vantage_class": c} for f, c in scope.scopes],
+        }
+        out.append(
+            {
+                "label": scope.label,
+                "subject": scope.subject,
+                "seq": scope.seq,
+                "scope_digest": _signing.corr_digest(body),
+                "scopes": body["scopes"],
+            }
+        )
+    return out
