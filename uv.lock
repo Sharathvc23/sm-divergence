@@ -549,14 +549,18 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
-    { name = "sm-resolver", git = "https://github.com/Sharathvc23/sm-resolver?rev=296cb7469791d7f399502dedc910f00258c97763" },
+    { name = "sm-resolver", specifier = ">=0.7" },
 ]
 provides-extras = ["attestation", "dev"]
 
 [[package]]
 name = "sm-resolver"
 version = "0.7.0"
-source = { git = "https://github.com/Sharathvc23/sm-resolver?rev=296cb7469791d7f399502dedc910f00258c97763#296cb7469791d7f399502dedc910f00258c97763" }
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/86/7c/a0bbdb4d32d27d0b768238e73cef7acb15ce9a7beb89adcdd77d6e52c9bd/sm_resolver-0.7.0.tar.gz", hash = "sha256:7ac3d447e52a3b930ed308c9fd115384e6e841642a72473bbe0b04c0cb51cf91", size = 65604, upload-time = "2026-10-30T08:54:53.115Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d5/4f/8ec06e1914b47119f1865757ad215cfab9d9892fbb9d85affece30ec7bdb/sm_resolver-0.7.0-py3-none-any.whl", hash = "sha256:7f7ad5d1de7b3dca13683779bdde57af236fa5084a63beb77b6d12537ed4680a", size = 19694, upload-time = "2026-10-30T08:54:51.802Z" },
+]
 
 [[package]]
 name = "typing-extensions"

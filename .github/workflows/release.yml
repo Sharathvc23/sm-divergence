@@ -123,6 +123,9 @@ jobs:
             git push origin "$TAG"
             echo "pushed $TAG"
           fi
+          if gh release view "$TAG" --json body --jq .body 2>/dev/null | grep -q "tags-step.log"; then
+            gh release edit "$TAG" --notes "See CHANGELOG.md for $VERSION."
+          fi
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --title "sm-divergence $VERSION" --notes "See CHANGELOG.md for $VERSION." ${{ steps.decide.outputs.publish == 'true' && 'dist/*' || '' }}
           fi
