@@ -86,6 +86,45 @@ informative:
     author:
       - ins: H. Birkholz
     target: https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/
+  RFC9457:
+  DAWN-CHARTER:
+    title: "Discovery of Agents With Names (DAWN) Charter"
+    author:
+      - org: IETF
+    date: 2026-10
+    seriesinfo:
+      Charter: charter-ietf-dawn-01
+    target: https://datatracker.ietf.org/doc/charter-ietf-dawn/
+  DAWN-TERMINOLOGY:
+    title: "Terminology for the Discovery of Agents With Names (DAWN)"
+    author:
+      - ins: A. Farrel
+      - ins: K. Yao
+      - ins: R. Schott
+      - ins: N. Williams
+    date: 2026-10
+    seriesinfo:
+      Internet-Draft: draft-farrel-dawn-terminology-06
+    target: https://datatracker.ietf.org/doc/draft-farrel-dawn-terminology/
+  DAWN-REQS:
+    title: "Requirements for the Discovery of Agents With Names (DAWN)"
+    author:
+      - ins: D. King
+      - ins: A. Farrel
+    date: 2026-10
+    seriesinfo:
+      Internet-Draft: draft-king-dawn-requirements-02
+    target: https://datatracker.ietf.org/doc/draft-king-dawn-requirements/
+  RAR:
+    title: "Registry-Assisted Resolution for Known Subjects Without DNS Discovery Anchors"
+    author:
+      - ins: R. Raskar
+      - ins: S. Sharaf
+      - ins: P. Chari
+    date: 2026-10
+    seriesinfo:
+      Internet-Draft: draft-raskar-agentic-web-federated-resolution-02
+    target: https://datatracker.ietf.org/doc/draft-raskar-agentic-web-federated-resolution/
   CAPSULE:
     title: "An Agent Action Capsule Profile for SCITT"
     author:
@@ -103,7 +142,11 @@ procedure for corroborating independent observations of an agent. It defines
 claim classification, canonical views, deterministic disagreement findings,
 multi-vantage equivocation detection, propagation-delay confirmation, and signed
 Corroboration Records. The procedure produces verifiable evidence for every
-sweep, including agreement and insufficient-observation results.
+sweep, including agreement and insufficient-observation results. It composes
+with registry-assisted resolution of known subjects: a registry's renewable
+subject-to-target binding carries a sequence, and the procedure attributes a
+source serving a superseded binding rather than comparing it, so propagation
+lag is never reported as disagreement.
 
 --- middle
 
@@ -117,11 +160,13 @@ Not every difference between two sources is misbehavior. A source that is subjec
 
 The procedure serves any layer at which a middleman answers questions about an agent: discovery (which endpoint), identity (which key), capability (which functions), and evidence (which records exist). Section 11 gives the two reference layer instantiations.
 
+Discovery is increasingly specified as *resolution*: a discovering entity that already knows a Subject Identity obtains, from one discovery mechanism it selected, the minimum information needed to continue, together with integrity, authority, freshness and revocation information {{RAR}} {{DAWN-CHARTER}}. Resolution is one source's answer. This document is what a verifier does when it holds two of them. The two are complementary and Section 12 states the relationship: resolution defines the shape and lifecycle of a single binding, corroboration defines the comparison across sources and the record of it, and neither evaluates trust.
+
 # Conventions and Definitions
 
 {::boilerplate bcp14-tagged}
 
-**Source:** Anything that answers "what do you have for agent X?": a registry, a name service, a DID method, a catalog, an evidence store.
+**Source:** Anything that answers "what do you have for agent X?": a registry, a name service, a DID method, a catalog, an evidence store. In DAWN terms {{DAWN-TERMINOLOGY}} a source is a discovery mechanism, or a registrar's resolution surface, that returns discovery information about a named entity; the agent is the discovered entity and the corroborator is a discovering entity acting as an auditor.
 
 **Source label:** The identifier under which a source appears in claims, findings and records. A label MUST be a URI {{RFC3986}}, MUST be stable for the lifetime of the source, and MUST be unique within the deployment that produced the record.
 
@@ -148,6 +193,8 @@ Labels are compared by exact octet equality. An implementation MUST NOT normaliz
 **Corroboration Record:** The signed, content-addressed result of one sweep for one subject (Section 10).
 
 **Self-Description:** An agent-signed bundle of sequence number, aliases, and service endpoints (Section 8).
+
+**Binding:** A source's subject-to-target association issued as a renewable lease {{RAR}}: a `sequence` that increases, within one **authority scope**, whenever the target, publisher, ownership state or authority evidence changes, together with validity bounds and revocation information. The authority scope is the issuer that validated the subject for that binding. Sequences are comparable only within one scope. A binding's sequence is a different clock from the self-description `seq` of Section 8: the first is set by the issuer that bound the subject to a target, the second by the subject.
 
 **CORR-DIGEST:** The lowercase hexadecimal encoding of SHA-256 applied to the UTF-8 octets of the RFC 8785 {{RFC8785}} JSON Canonicalization Scheme serialization of a value. All digests in this document use this construction. Values in digest-bearing fields MUST NOT be JSON floating-point numbers.
 
@@ -202,8 +249,12 @@ Values seeded by this document, bare:
 | `refused` | the source declined to answer |
 | `unparseable` | answered; the body could not be read |
 | `unverifiable` | answered; the source's own verification failed |
+| `expired` | answered; the binding served is past its validity bound and MUST be treated as stale |
+| `revoked` | answered; the source itself marks the binding revoked |
 
-A `present` or `absent` claim MAY use its status as its outcome, which is the least specific honest answer. Bare names are reserved for values seeded in this document and its successors; any party introducing another MUST namespace it with a reverse-DNS or URI prefix, as for finding kinds (Section 12). A consumer MUST treat an unknown outcome as informational and MUST NOT reject a record for carrying one.
+`expired` and `revoked` exist because a resolution profile requires that a binding past `expiresAt`, or revoked, MUST NOT be treated as current {{RAR}}; a resolver that honours that rule has an answer it may not use, which is an `error` claim, never an `absent` one, and the outcome records which.
+
+A `present` or `absent` claim MAY use its status as its outcome, which is the least specific honest answer. Bare names are reserved for values seeded in this document and its successors; any party introducing another MUST namespace it with a reverse-DNS or URI prefix, as for finding kinds (Section 13). A consumer MUST treat an unknown outcome as informational and MUST NOT reject a record for carrying one.
 
 **An outcome MUST NOT affect which claims enter the diff.** `status` alone decides that. Outcome is provenance, and were it to filter, a source could remove itself from comparison by describing itself.
 
@@ -227,6 +278,8 @@ RFC 3986 {{RFC3986}} Section 6 names syntax-based normalization but leaves sever
 
 A value that is not a URI is compared unchanged. Guessing at a syntax the layer does not recognize is worse than comparing it literally.
 
+A view MAY additionally carry a **lease position**: the binding's `sequence` and authority scope (Section 2). The position is not a field; it MUST NOT be compared as a value and MUST NOT appear in `values` of any finding. It is read by the supersession rule of Section 6.4. The authority issuer likewise MUST NOT be a compared field: two sources validating the same subject through different issuers is the ordinary multi-registry case, and a disagreement between issuers is not a disagreement about the subject.
+
 Where a field carries its own proof (a signed record's DID, a key), the resolver MUST populate it only from a successfully verified artifact whose subject binds to the outer agent identifier; on any verification failure the field is null. A verifier MUST NOT allow an unverified value to produce a divergence finding against a verified one (the no-laundering rule).
 
 # The Diff
@@ -239,7 +292,7 @@ Emit an `omission` finding iff the agent is `present` on at least one source and
 
 ## Field Divergence
 
-For each field name appearing in any present view, collect the non-null values keyed by (source, vantage). Comparison is scoped to a **cohort**: the claims sharing one vantage identifier.
+For each field name appearing in any **current** present view (Section 6.4), collect the non-null values keyed by (source, vantage). Comparison is scoped to a **cohort**: the claims sharing one vantage identifier.
 
 1. A source contributes a single value to the comparison for a field only when all non-null values that source produced for that field agree across its observed vantages. Such a source participates in every cohort.
 2. If a source produced differing non-null values for a field across vantages and an applicable Answer Scope exists (Section 9.3), that source contributes its value separately to each cohort identified by the corresponding vantage.
@@ -253,6 +306,16 @@ Emit a finding of `kind` equal to the field name, once per cohort, iff more than
 For each source observed from more than one vantage, if that source's vantages yield differing non-null values for any field, emit a `source_equivocation` finding attributing that source. Detail: `{source, field, values}` where `values` maps vantage labels to values. The finding is emitted whether or not the variation was declared (Section 9); its per-vantage values are carried in the record for audit.
 
 Absent an applicable Answer Scope, a source under `source_equivocation` for a field contributes no single agreed value to the Section 6.2 comparison for that field: a source that disagrees with itself cannot corroborate. Where an Answer Scope applies (Section 9.3), that withholding is **replaced, not waived**: the source's per-vantage values enter the cohort comparison of Section 6.2 instead. **This rule is central:** withholding the source without replacing it would let a source that declares variation serve one vantage a forged value and be recorded `AGREE`, because nothing would remain to compare that value against, strictly worse than not honouring the declaration at all.
+
+## Supersession
+
+Before Sections 6.2 and 6.3 are evaluated, the present claims are partitioned by authority scope. Claims whose view carries no lease position are **current** in their own right. Within each scope the highest `sequence` observed is current; a claim whose `sequence` is lower is **superseded**.
+
+For each (source, scope) with a superseded claim, emit a `stale_binding` finding attributing that source. Detail: `{source, scope, sequence, current_sequence, current_on}`, where `current_on` lists the sources at the current sequence. A superseded claim MUST be withheld from Sections 6.2 and 6.3: a source serving yesterday's binding is behind, not disagreeing, and comparing its target against the current one would report propagation as tampering. A source that is current from one vantage and superseded from another is mid-propagation and MUST NOT be charged `source_equivocation` for that reason alone. A superseded claim remains `present` for Section 6.1 and remains decisive for the verdict (Section 10): the subject exists on that source.
+
+Equal sequences with differing values are the disagreement supersession exists to isolate, and MUST still yield a field finding.
+
+`stale_binding` is a finding: the verdict is `DIVERGENT`. A lagging source within the staleness window is `suspected` (Section 7); one still behind after it is `confirmed`, which is the replay and stale-cache condition the resolution profile's security considerations name {{RAR}}. What a confirmed stale binding is worth is the consumer's judgement, as for every finding. The identity of the finding (Section 7.1) is `(source, scope)`, never the sequence numbers: a source that stays one step behind a moving current is one persistent condition.
 
 # Observation Time and Confirmation
 
@@ -270,10 +333,11 @@ Confirmation asks whether a finding observed now is the *same disagreement* as o
 | `omission` | `present_on`, `missing_from` |
 | `source_equivocation` | `source`, `field` |
 | `scope_violation` | `source`, `field`, `declared_class` |
+| `stale_binding` | `source`, `scope` |
 | a view field name | `field`, the participating source labels, and the cohort |
 | any other kind | the whole `detail` |
 
-**Observed values MUST NOT participate in the identity.** Values change while the same disagreement persists, and keying on them makes a source that rotates its answer produce a stream of unrelated findings, each restarting as `suspected` and never reaching `confirmed`. That is the staleness abuse of Section 14, made worse: the pattern does not accumulate under one identity either, so even the count of short-lived divergences from one source is diluted.
+**Observed values MUST NOT participate in the identity.** Values change while the same disagreement persists, and keying on them makes a source that rotates its answer produce a stream of unrelated findings, each restarting as `suspected` and never reaching `confirmed`. That is the staleness abuse of Section 15, made worse: the pattern does not accumulate under one identity either, so even the count of short-lived divergences from one source is diluted.
 
 **The cohort MUST participate** wherever the comparison was scoped (Section 6.2). The same sources can disagree differently in two contexts, and without the cohort one of those disagreements masks the other.
 
@@ -365,7 +429,7 @@ An implementation MUST record, in every annotated finding, which `seq` of the de
 
 A source that varies a field contrary to an Answer Scope it *previously* published, most plainly one whose scope asserted no variation, is not merely exhibiting an undeclared divergence. It has published a constraint and violated it. A corroborator MUST emit a `scope_violation` finding attributing that source. Detail: `{source, field, declared_class, observed, declaration_version}`.
 
-**The temporal rule is not optional.** A corroborator MUST NOT emit `scope_violation` unless it can establish that the scope it evaluated was published *before* the observation it contradicts. Section 9.4 prevents a source retroactively legitimizing a past divergence by publishing a broader scope; the same reasoning applies in the opposite direction, and with a different victim. Without the temporal rule, a narrower scope published after the fact, by the source under duress, or by anyone who can influence what a sweeper fetches, manufactures an accusation about an observation that did not violate anything at the time it was made. Establishing publication order requires a witnessed history of what a source published when, which this document places out of scope (Section 14); until a deployment has one, it MUST NOT emit this kind.
+**The temporal rule is not optional.** A corroborator MUST NOT emit `scope_violation` unless it can establish that the scope it evaluated was published *before* the observation it contradicts. Section 9.4 prevents a source retroactively legitimizing a past divergence by publishing a broader scope; the same reasoning applies in the opposite direction, and with a different victim. Without the temporal rule, a narrower scope published after the fact, by the source under duress, or by anyone who can influence what a sweeper fetches, manufactures an accusation about an observation that did not violate anything at the time it was made. Establishing publication order requires a witnessed history of what a source published when, which this document places out of scope (Section 15); until a deployment has one, it MUST NOT emit this kind.
 
 A deployment that does have one records its evidence in the finding's `detail` under `history_proof`, so that the finding is independently auditable without this document standardizing any particular mechanism:
 
@@ -391,7 +455,7 @@ An implementation MUST emit a Corroboration Record for every (sweep, subject) pa
 
 ~~~
 {
-  "version": "corroboration/0.3",
+  "version": "corroboration/0.4",
   "alg": "EdDSA",
   "record_id": "<CORR-DIGEST of the object minus these two fields>",
   "subject": { "agent_id": "<id>", "did": "<did:key or null>" },
@@ -402,10 +466,12 @@ An implementation MUST emit a Corroboration Record for every (sweep, subject) pa
     { "source": "<label>", "vantage": "<label or null>",
       "status": "present" | "absent" | "error",
       "view": { "<field>": "<value or null>", ... } | null,
-      "outcome": "<see Section 4.1>" }
+      "outcome": "<see Section 4.1>",
+      "binding": { "sequence": <integer>,
+                   "scope": "<issuer or null>" } }
   ],
   "findings": [
-    { "kind": "<see Section 12>", "agent_id": "<id>",
+    { "kind": "<see Section 13>", "agent_id": "<id>",
       "confirmation": "suspected" | "confirmed",
       "declared": true | false,
       "declaration_version": <integer or null>,
@@ -430,20 +496,43 @@ Rules:
 5. `claims` MUST include `error`-status entries (excluded from the diff, preserved for audit).
 6. A consumer binding a Corroboration Record from another evidence format SHOULD bind `record_id` and SHOULD state the verdict it relied upon.
 7. The verdict MUST be computed as follows, and only as follows. The verdict is `INSUFFICIENT` if and only if the record contains fewer than two `present`-or-`absent` claims. Otherwise the verdict is `DIVERGENT` if and only if `findings` is non-empty, and `AGREE` otherwise. A `declared` annotation on a finding (Section 9.4) does not affect this computation.
-8. `observed_at` is the observation time of every claim in the record. Claims do not carry individual timestamps; a deployment whose sweeps span a period long enough for that to matter SHOULD shorten its sweeps rather than reinterpret this field (Section 14).
+8. `observed_at` is the observation time of every claim in the record. Claims do not carry individual timestamps; a deployment whose sweeps span a period long enough for that to matter SHOULD shorten its sweeps rather than reinterpret this field (Section 15).
 9. `answer_scopes` MUST list every Answer Scope the sweep relied upon, and MUST be present and empty when it relied on none. "No scope applied" and "this implementation does not record scopes" are different facts, and a verifier that cannot distinguish them cannot know whether a record is complete. Each entry MUST carry `scope_digest`, the CORR-DIGEST of the verified bundle, and SHOULD carry `scopes`. **This rule is central:** `declared` with a sequence number states that a scope was matched without stating which rule was matched or which bytes the sequence refers to, so a verifier holding only the record could not reproduce the decision. The digest binds the decision to specific bytes; carrying `scopes` as well spares a verifier that does not already hold the bundle from a fetch, which is what offline verification exists to avoid. A finding with `declared: true` is re-derived by locating the entry whose `label` equals the finding's source and whose `seq` equals its `declaration_version`.
 10. `declared` MUST be present on every finding, defaulting to `false`; `declaration_version` MUST carry the matched `seq` when `declared` is `true` and MUST be null otherwise. Neither member participates in any dedup or first-observation key a consumer maintains, they describe what the source had published, not which disagreement was observed, and a source publishing or revising a declaration MUST NOT change the identity of a finding already being tracked.
-11. A verifier MUST check `version` against the set of record versions it accepts and MUST reject any other. A verifier consuming records issued before this revision MUST accept `corroboration/0.1` and `corroboration/0.2` alongside `corroboration/0.3`; for those versions the absence of `declared` is read as `false` and the absence of `alg` as `EdDSA`.
+11. A verifier MUST check `version` against the set of record versions it accepts and MUST reject any other. A verifier consuming records issued before this revision MUST accept `corroboration/0.1`, `corroboration/0.2` and `corroboration/0.3` alongside `corroboration/0.4`; for those versions the absence of `declared` is read as `false`, the absence of `alg` as `EdDSA`, and the absence of `binding` as no lease position.
+12. A claim entry whose view carries a lease position (Section 5) MUST carry `binding` with that position's `sequence` and `scope`; an entry whose view carries none MUST omit the member. A `stale_binding` finding names the sequences it compared; the claim entries are where a verifier re-derives that comparison from recorded bytes, and a verifier MUST reject a record whose `stale_binding` findings do not follow from its `binding` members under Section 6.4.
 
 # Reference Layer Instantiations
 
-**Discovery**: view `{endpoint, did}`. Resolvers: a by-id HTTP registry resolver (`GET {base}/api/agents/{id}`, path injectable); a two-hop index resolver (resolve a locator to `{registry_url, identifier}`, then fetch the record; a missing or empty hop field yields an `error` claim, a not-found at either hop is `absent`). The `did` field is populated only per Section 5's verified-field rule, from a signed record verified offline against its embedded `did:key`, with subject binding to the outer id.
+**Discovery**: view `{endpoint, did, digest}`, with a lease position. Resolvers:
+
+- a **known-subject resolver** for a Resolution Registry implementing registry-assisted resolution of a Known Subject {{RAR}} (`POST {base}/resolve` with the Subject Identity and its type; one hop; the target is terminal). An empty `targets` array and a `404` are `absent`; a target past `expiresAt`, lacking it, lacking `sequence`, or marked revoked is `error` with outcome `expired`, `unverifiable` or `revoked`; a target whose method was not accepted, in particular another registry, which the profile forbids as a terminal target, is `error`/`refused`; a Problem Details {{RFC9457}} `code` maps onto the outcome vocabulary of Section 4.1. `targetUrl` is the endpoint, `targetDigest` the digest, and `sequence` with `authority.issuer` the lease position. The resolver does not evaluate Authority Evidence and does not follow a target to another registry;
+- a **by-id HTTP registry resolver** (`GET {base}/api/agents/{id}`, path injectable);
+- a **two-hop index resolver**, retained for sources still exposing that shape (resolve a locator to `{registry_url, identifier}`, then fetch the record; a missing or empty hop field yields an `error` claim, a not-found at either hop is `absent`). Under the known-subject profile a registry returns a terminal target and never another registry, so an index is one source among several and this shape is not used.
+
+The `did` field is populated only per Section 5's verified-field rule, from a signed record verified offline against its embedded `did:key`, with subject binding to the outer id. The `digest` field is compared only where both sides carry one; two sources agreeing on an endpoint and disagreeing on its digest have resolved to one host serving two documents, which is substitution at the host rather than at the source, a condition the endpoint comparison cannot express.
 
 **Identity**: view `{key}`, the agent's Ed25519 verification key, represented in `did:key` multibase form (the encoding shared by `did:key` identifiers and `Ed25519VerificationKey2020` {{EDSIG2020}} `publicKeyMultibase`, so keys compare as strings). Resolvers: `did:key` (offline; the self-certifying root), `did:web` (fetched from the method-specified document location; `404` is `absent`), and a Universal Resolver adapter. A method serving a different key than the root is a `key` divergence.
 
+# Relationship to Registry-Assisted Resolution of Known Subjects
+
+Registry-assisted resolution {{RAR}} specifies how a discovering entity that already knows a Subject Identity, and has no usable DNS discovery anchor for it, obtains from one client-selected Resolution Registry the minimum information needed to continue discovery, together with registry provenance, subject-specific authority evidence, and a renewable binding carrying sequence, validity bounds and revocation information. It is deliberately narrow: no search, no ranking, no global root, no registry-to-registry forwarding, no trust evaluation. It also leaves open how a client that holds bindings from several registries notices that they disagree, and names a transparency mechanism for conflicting or malicious bindings as an open question.
+
+This document is that mechanism, and the two compose without either widening its scope:
+
+- **Resolution is one source's answer; corroboration is the comparison.** A Resolution Registry is a source in the sense of Section 2, and each binding it returns is one claim. A Corroboration Record is the artifact a client, or an auditor acting for many clients, produces from two or more such claims.
+- **No forwarding is needed.** Corroboration is performed by the party holding the claims. The registries need not communicate, synchronize or route, and the prohibition on inter-registry forwarding is preserved exactly; it is the sweeper that queries each configured registry directly.
+- **The sweeper is an auditor over a bounded set.** The resolution profile forbids unbounded registry fan-out and requires exact lookup without enumeration. A corroboration sweep satisfies both: its source set is the explicitly configured set of Section 2, it issues one exact resolution request per source per subject, and it enumerates nothing. A deployment MUST NOT use a sweep to discover registries or subjects it was not configured with.
+- **Lease sequence is the supersession signal.** The binding's `sequence` within its authority scope is read by Section 6.4, so a registry serving a superseded binding is attributed as `stale_binding` and never compared against the current one. This is the mechanism by which "two registries disagree" is distinguished from "one registry is behind", which the resolution profile's freshness rules require a resolver to handle and which a naive comparison would report as tampering.
+- **The direct path is a source.** Where a validated direct DNS-anchored discovery path exists, the resolution profile requires it to remain direct and forbids silent downgrade to a weaker registry result. A corroborator MAY treat the direct path as one source beside the registries: a registry result that diverges from a current direct result is then a finding attributing the registry, which is the detector that downgrade rule otherwise lacks.
+- **Authority Evidence is provenance, never verdict.** The resolution profile separates registry provenance from subject authority and leaves acceptability of authority evidence to local policy. This document carries the authority issuer as the scope a sequence counts in and MUST NOT let it move the verdict: a corroborator that preferred the claim with the stronger authority would be performing the trust evaluation that both the DAWN charter {{DAWN-CHARTER}} and the resolution profile exclude. The issuer MAY annotate a finding for the consumer, as `declared` annotates one (Section 9.4).
+- **Answer Scope and target scope.** The resolution profile's optional per-target `scope` (a bounded audience, role or deployment) is the registry-side counterpart of the source-published Answer Scope of Section 9: both declare, in advance, that an answer is intended to vary along a stated dimension. A deployment that corroborates scoped targets SHOULD align the Answer Scope vantage class with the target scope dimension so that the cohort comparison of Section 6.2 compares like with like.
+
+Nothing here changes what either document requires of a single registry or a single resolution. Corroboration adds obligations only to the party that chooses to hold several answers and say so.
+
 # Finding Kinds and Extensibility
 
-Kinds seeded by this document: `omission`, `source_equivocation`, `scope_violation`, `stale_description`, `agent_equivocation`, and one kind per view field name of a layer defined by this document or by an extension specification (this document seeds `endpoint`, `did`, `key`). Bare (un-prefixed) kind names are reserved for values seeded in this document and its successors; any party introducing a new kind MUST namespace it with a reverse-DNS or URI prefix. A consumer MUST treat unknown kinds as informational and MUST NOT reject a record for carrying one.
+Kinds seeded by this document: `omission`, `source_equivocation`, `scope_violation`, `stale_description`, `stale_binding`, `agent_equivocation`, and one kind per view field name of a layer defined by this document or by an extension specification (this document seeds `endpoint`, `did`, `digest`, `key`). Bare (un-prefixed) kind names are reserved for values seeded in this document and its successors; any party introducing a new kind MUST namespace it with a reverse-DNS or URI prefix. A consumer MUST treat unknown kinds as informational and MUST NOT reject a record for carrying one.
 
 # Conformance
 
@@ -466,6 +555,13 @@ The corpus MUST include the following cases, which exercise the rules most likel
 | a scope whose `label` differs from the label it was served at only in case or a trailing solidus | the scope is rejected |
 | the same disagreement re-observed with changed values | the same finding identity; confirmation advances |
 | the same sources disagreeing in two cohorts | two findings, distinct identities |
+| two sources, same scope, sequences 13 and 14, differing endpoints | `stale_binding` attributing the source at 13; no `endpoint` finding |
+| two sources, same scope, equal sequences, differing endpoints | `endpoint` field divergence |
+| two sources, different scopes, unrelated sequences, equal values | no finding |
+| a source current from one vantage and superseded from another | `stale_binding`; no `source_equivocation` |
+| a superseded source beside an `absent` source | `omission` lists the superseded source as `present_on` |
+| a binding past `expiresAt` | `error` with outcome `expired`; no `omission` |
+| equal endpoints, differing digests | `digest` field divergence |
 
 Answer Scope support is OPTIONAL. An implementation that does not support it conforms: with no declaration supplied, Section 6.2 yields a single cohort spanning every claim, and the procedure is identical to one with no notion of declaration. An implementation that *does* support it MUST NOT report `AGREE` for a sweep in which a declared-varying source's cohort disagrees, the redirection of Section 6.3 is not optional for an implementation that honors declarations at all, because honouring the declaration without it is strictly less safe than ignoring the declaration.
 
@@ -481,6 +577,10 @@ Answer Scope support is OPTIONAL. An implementation that does not support it con
 
 **Sweeper honesty.** A record attests the sweep's recorded observations, not the sweeper's honesty; a dishonest sweeper can sign a fiction. Anchoring bounds timing and prevents silent substitution; consumers with high assurance requirements SHOULD corroborate the corroborator, multiple independent sweepers over the same watch set, which this procedure supports without modification (sweep records are themselves views to diff).
 
+**Fan-out and enumeration.** A sweep issues one request per configured source per watched subject. A sweeper configured with many sources, or watching many subjects, is indistinguishable from a scraper to the registries it queries, and the resolution profile treats exact-lookup endpoints as denial-of-service and enumeration targets. A deployment SHOULD rate-limit its own sweeps, SHOULD prefer a watch set the subjects consented to or the sweeper operates for, and MUST NOT derive subjects or sources from a registry's responses. Query fan-out reveals which subjects a sweeper watches to every registry it asks; a deployment with a privacy obligation SHOULD treat the watch set as sensitive.
+
+**Authority laundering.** A corroborator that accepted the registry's own statement of a target's authority as a reason to prefer that target would let a registry win a comparison by asserting authority. Authority evidence is never evaluated by this procedure and never moves the verdict (Section 12); where a consumer evaluates it, the consumer does so against the recorded claims after the fact.
+
 **Staleness abuse.** An attacker aware of the staleness window can rotate lies faster than confirmation. `suspected` findings therefore MUST be preserved in records even when never confirmed; a pattern of unconfirmed, short-lived divergences from one source is itself signal, and its evaluation is consumer policy.
 
 **Self-description replay and squatting.** Addressed structurally in Section 8 (supersession, corroborated distribution, verify-back); implementations MUST NOT skip the verify-back rule, which is the sole defense against alias squatting manufacturing false divergences.
@@ -493,7 +593,7 @@ Answer Scope support is OPTIONAL. An implementation that does not support it con
 
 # IANA Considerations
 
-This document requests no IANA actions. The finding-kind vocabulary is governed by the namespacing convention of Section 12; this document defines the claim outcomes of Section 4.1, the endpoint canonicalization profile `endpoint-normalization/0.1` of Section 5, and defines `region` and `asn` as the initial occupiable vantage classes, with the value spaces given in Section 3.1, and a future revision MAY establish an IANA registry for further classes should the set need to grow outside this document and its successors; the record and self-description `version` strings are governed by this document and its successors. A future revision MAY register a media type for the Corroboration Record (candidate: `application/corroboration-record+json`) once transport contexts warrant it.
+This document requests no IANA actions. The finding-kind vocabulary is governed by the namespacing convention of Section 13; this document defines the claim outcomes of Section 4.1, the endpoint canonicalization profile `endpoint-normalization/0.1` of Section 5, and defines `region` and `asn` as the initial occupiable vantage classes, with the value spaces given in Section 3.1, and a future revision MAY establish an IANA registry for further classes should the set need to grow outside this document and its successors; the record and self-description `version` strings are governed by this document and its successors. A future revision MAY register a media type for the Corroboration Record (candidate: `application/corroboration-record+json`) once transport contexts warrant it.
 
 --- back
 
@@ -502,6 +602,16 @@ This document requests no IANA actions. The finding-kind vocabulary is governed 
 - **Section 4.1 (new).** Claim outcomes become a seeded vocabulary: `timeout`, `unreachable`, `refused`, `unparseable`, `unverifiable`, with the namespacing rule already used for finding kinds. `-01` left the member free-form, which would have produced incomparable strings for the same condition across implementations. States that an outcome MUST NOT affect which claims enter the diff.
 - **Section 10.** The record carries `alg`, the JOSE/COSE identifier of the signature algorithm, and a verifier MUST derive the algorithm from the key type the `sweeper` `did:key` encodes and reject a record whose `alg` disagrees. `-01` named no algorithm at all, so a verifier had to know it out of band and a second algorithm could not be introduced without silently changing what every existing record meant. Record version becomes `corroboration/0.3`; `alg` is REQUIRED from it and implied `EdDSA` before it.
 - **Section 15.** Records that the claim outcomes are governed by this document.
+- **Section 2.** Defines **Binding**: a source's subject-to-target association as a renewable lease with a `sequence` per authority scope, and distinguishes it from the self-description `seq`. Aligns the definition of source with DAWN terminology.
+- **Section 4.1.** Seeds `expired` and `revoked` outcomes: a binding the resolution profile forbids treating as current is an `error` claim, never `absent`.
+- **Section 5.** A view MAY carry a lease position; it is not compared, and neither is the authority issuer.
+- **Section 6.4 (new).** Supersession: within one authority scope a claim below the current `sequence` is attributed as `stale_binding` and withheld from field divergence and `source_equivocation`. Lag is attributed, not reported as tampering. Identity is `(source, scope)`.
+- **Section 10.** Claim entries carry `binding`; record version becomes `corroboration/0.4`; rule 12 requires `stale_binding` findings to follow from recorded bindings.
+- **Section 11.** The discovery view gains `digest`; a known-subject resolver for registry-assisted resolution (`POST /resolve`) is the first discovery resolver; the two-hop index resolver is retained as legacy.
+- **Section 12 (new).** States the relationship to registry-assisted resolution of known subjects and the DAWN charter: resolution is one source's answer, corroboration the comparison; no forwarding; bounded fan-out and exact lookup; authority evidence is provenance, never verdict; the direct DNS path as a source; Answer Scope beside target scope.
+- **Section 13.** Seeds `stale_binding` and `digest`.
+- **Section 14.** Conformance cases for supersession, expiry and digest.
+- **Section 15.** Adds **Fan-out and enumeration** and **Authority laundering**.
 - Em dashes replaced with commas, colons and parentheses throughout. The document is now ASCII-only, which removes the non-ASCII line-length reports from submission checking.
 
 # Changes from -00
@@ -532,7 +642,7 @@ Editorial and precision changes throughout, following review:
 - **Section 7** requires exactly one staleness window per deployment and says why per-source windows are not offered: the record carries a single `staleness_window_s`.
 - **Section 9.5** requires that a scope be shown to predate the observation it contradicts before `scope_violation` may be emitted, and states that a deployment without a witnessed publication history MUST NOT emit the kind. Without it, a narrower scope published after the fact manufactures an accusation.
 - **Section 10** states the verdict computation exhaustively, and drops "monetary" from the numeric rule (no monetary fields are defined).
-- **Section 12** no longer refers to a "registered layer"; this document defines no layer registry.
+- **Section 13** no longer refers to a "registered layer"; this document defines no layer registry.
 - **Section 4** replaces the language-specific "MUST NOT raise" with a requirement to return an `error` claim.
 
 # Mapping to the Reference Implementation
@@ -540,10 +650,10 @@ Editorial and precision changes throughout, following review:
 This appendix is informative. Where it differs from the body of this document, the normative requirements in the body govern; the reference implementation does not define behaviour.
 
 
-Every normative element of this document is implemented in the reference implementation, split across two packages: the source-agnostic **sm-resolver** kernel (the claim model of Section 3, the view contract of Section 5, the diff of Section 6, and the confirmation discipline of Section 7, producing an unsigned sweep result with the verdict of Section 10) and **sm-divergence** built on it (the reference discovery and identity layers of Section 11, the agent self-description of Section 8, and the signing that seals a sweep result into the Corroboration Record of Section 10). The `present`/`absent`/`error` classification (Section 4), the view contract (Section 5), and the diff (Section 6) are the kernel's stable core; the vantage axis and `source_equivocation` (Sections 3, 6.3), observation time and confirmation (Section 7), the self-description schema and hardening (Section 8), and the Corroboration Record emitted on every verdict (Section 10) are all present and covered by the conformance corpus. The Answer Scope of Section 9 is split the same way: the kernel accepts an already-verified declaration as inert data and performs the cohort comparison of Section 6.2, while fetching, verifying and matching the bundle belong to the layer above, the kernel holds no keys and performs no I/O.
+Every normative element of this document is implemented in the reference implementation, split across two packages: the source-agnostic **sm-resolver** kernel (the claim model of Section 3, the view contract of Section 5, the diff of Section 6, and the confirmation discipline of Section 7, producing an unsigned sweep result with the verdict of Section 10) and **sm-divergence** built on it (the reference discovery and identity layers of Section 11, the agent self-description of Section 8, and the signing that seals a sweep result into the Corroboration Record of Section 10). The relationship stated in Section 12 is implemented as a thin resolver: the kernel never learns the resolution profile, and the profile never learns the comparison. The `present`/`absent`/`error` classification (Section 4), the view contract (Section 5), and the diff (Section 6) are the kernel's stable core; the vantage axis and `source_equivocation` (Sections 3, 6.3), observation time and confirmation (Section 7), the self-description schema and hardening (Section 8), and the Corroboration Record emitted on every verdict (Section 10) are all present and covered by the conformance corpus. The Answer Scope of Section 9 is split the same way: the kernel accepts an already-verified declaration as inert data and performs the cohort comparison of Section 6.2, while fetching, verifying and matching the bundle belong to the layer above, the kernel holds no keys and performs no I/O.
 
-The reference implementation is available as open-source software (MIT License) at https://github.com/Sharathvc23/sm-divergence and https://github.com/Sharathvc23/sm-resolver, and is published on PyPI as `sm-divergence` and `sm-resolver`. This revision corresponds to `sm-resolver` 0.6.0 and `sm-divergence` 0.11.0. The companion informative essay is "The Quilt That Checks Itself" (Stellarminds.ai / Project NANDA research).
+The reference implementation is available as open-source software (MIT License) at https://github.com/Sharathvc23/sm-divergence and https://github.com/Sharathvc23/sm-resolver, and is published on PyPI as `sm-divergence` and `sm-resolver`. This revision corresponds to `sm-resolver` 0.7.0 and `sm-divergence` 0.12.0. The supersession rule of Section 6.4 lives in the kernel (`Binding`, `stale_binding`); the known-subject resolver of Section 11, the `digest` field and the `binding` claim-entry member live in `sm-divergence`. The companion informative essay is "The Quilt That Checks Itself" (Stellarminds.ai / Project NANDA research).
 
 # Related Work {#related}
 
-The multi-perspective corroboration pattern this document applies to agent discovery mirrors the CA/Browser Forum's Multi-Perspective Issuance Corroboration {{MPIC}} for certificate issuance and transparency-log constructions {{RFC6962}} {{RFC9162}} {{CONIKS}}. Adjacent agent-identity work includes Agent Name Service v2 {{ANSV2}} and SCITT-based evidence profiles {{SCITT}} {{CAPSULE}}; this document is complementary, defining the cross-source comparison and record rather than a naming or transparency substrate.
+The multi-perspective corroboration pattern this document applies to agent discovery mirrors the CA/Browser Forum's Multi-Perspective Issuance Corroboration {{MPIC}} for certificate issuance and transparency-log constructions {{RFC6962}} {{RFC9162}} {{CONIKS}}. Within the IETF, the DAWN working group {{DAWN-CHARTER}} is chartered for the initial discovery of public properties of AI resources, with integrity for exchanged discovery information in scope and search, identity management and trust evaluation beyond secure exchange out of it; its terminology {{DAWN-TERMINOLOGY}} and requirements {{DAWN-REQS}} work frame the vocabulary this document adopts where it applies. Registry-assisted resolution of known subjects {{RAR}} specifies the single-registry resolution contract, binding lifecycle and provenance model that Section 12 composes with. Adjacent agent-identity work includes Agent Name Service v2 {{ANSV2}} and SCITT-based evidence profiles {{SCITT}} {{CAPSULE}}; this document is complementary to all of these, defining the cross-source comparison and record rather than a discovery mechanism, a naming system or a transparency substrate.

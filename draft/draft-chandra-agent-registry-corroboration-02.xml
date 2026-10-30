@@ -30,7 +30,7 @@
       </address>
     </author>
 
-    <date year="2026" month="August" day="28"/>
+    <date year="2026" month="October" day="30"/>
 
     <area>Security</area>
     <workgroup>Network Working Group</workgroup>
@@ -49,7 +49,11 @@ procedure for corroborating independent observations of an agent. It defines
 claim classification, canonical views, deterministic disagreement findings,
 multi-vantage equivocation detection, propagation-delay confirmation, and signed
 Corroboration Records. The procedure produces verifiable evidence for every
-sweep, including agreement and insufficient-observation results.</t>
+sweep, including agreement and insufficient-observation results. It composes
+with registry-assisted resolution of known subjects: a registry's renewable
+subject-to-target binding carries a sequence, and the procedure attributes a
+source serving a superseded binding rather than comparing it, so propagation
+lag is never reported as disagreement.</t>
 
 
 
@@ -74,6 +78,8 @@ sweep, including agreement and insufficient-observation results.</t>
 
 <t>The procedure serves any layer at which a middleman answers questions about an agent: discovery (which endpoint), identity (which key), capability (which functions), and evidence (which records exist). Section 11 gives the two reference layer instantiations.</t>
 
+<t>Discovery is increasingly specified as <em>resolution</em>: a discovering entity that already knows a Subject Identity obtains, from one discovery mechanism it selected, the minimum information needed to continue, together with integrity, authority, freshness and revocation information <xref target="RAR"/> <xref target="DAWN-CHARTER"/>. Resolution is one source's answer. This document is what a verifier does when it holds two of them. The two are complementary and Section 12 states the relationship: resolution defines the shape and lifecycle of a single binding, corroboration defines the comparison across sources and the record of it, and neither evaluates trust.</t>
+
 </section>
 <section anchor="conventions-and-definitions"><name>Conventions and Definitions</name>
 
@@ -85,7 +91,7 @@ appear in all capitals, as shown here.</t>
 
 <?line -18?>
 
-<t><strong>Source:</strong> Anything that answers "what do you have for agent X?": a registry, a name service, a DID method, a catalog, an evidence store.</t>
+<t><strong>Source:</strong> Anything that answers "what do you have for agent X?": a registry, a name service, a DID method, a catalog, an evidence store. In DAWN terms <xref target="DAWN-TERMINOLOGY"/> a source is a discovery mechanism, or a registrar's resolution surface, that returns discovery information about a named entity; the agent is the discovered entity and the corroborator is a discovering entity acting as an auditor.</t>
 
 <t><strong>Source label:</strong> The identifier under which a source appears in claims, findings and records. A label <bcp14>MUST</bcp14> be a URI <xref target="RFC3986"/>, <bcp14>MUST</bcp14> be stable for the lifetime of the source, and <bcp14>MUST</bcp14> be unique within the deployment that produced the record.</t>
 
@@ -112,6 +118,8 @@ appear in all capitals, as shown here.</t>
 <t><strong>Corroboration Record:</strong> The signed, content-addressed result of one sweep for one subject (Section 10).</t>
 
 <t><strong>Self-Description:</strong> An agent-signed bundle of sequence number, aliases, and service endpoints (Section 8).</t>
+
+<t><strong>Binding:</strong> A source's subject-to-target association issued as a renewable lease <xref target="RAR"/>: a <spanx style="verb">sequence</spanx> that increases, within one <strong>authority scope</strong>, whenever the target, publisher, ownership state or authority evidence changes, together with validity bounds and revocation information. The authority scope is the issuer that validated the subject for that binding. Sequences are comparable only within one scope. A binding's sequence is a different clock from the self-description <spanx style="verb">seq</spanx> of Section 8: the first is set by the issuer that bound the subject to a target, the second by the subject.</t>
 
 <t><strong>CORR-DIGEST:</strong> The lowercase hexadecimal encoding of SHA-256 applied to the UTF-8 octets of the RFC 8785 <xref target="RFC8785"/> JSON Canonicalization Scheme serialization of a value. All digests in this document use this construction. Values in digest-bearing fields <bcp14>MUST NOT</bcp14> be JSON floating-point numbers.</t>
 
@@ -181,9 +189,15 @@ appear in all capitals, as shown here.</t>
       <c>answered; the body could not be read</c>
       <c><spanx style="verb">unverifiable</spanx></c>
       <c>answered; the source's own verification failed</c>
+      <c><spanx style="verb">expired</spanx></c>
+      <c>answered; the binding served is past its validity bound and MUST be treated as stale</c>
+      <c><spanx style="verb">revoked</spanx></c>
+      <c>answered; the source itself marks the binding revoked</c>
 </texttable>
 
-<t>A <spanx style="verb">present</spanx> or <spanx style="verb">absent</spanx> claim <bcp14>MAY</bcp14> use its status as its outcome, which is the least specific honest answer. Bare names are reserved for values seeded in this document and its successors; any party introducing another <bcp14>MUST</bcp14> namespace it with a reverse-DNS or URI prefix, as for finding kinds (Section 12). A consumer <bcp14>MUST</bcp14> treat an unknown outcome as informational and <bcp14>MUST NOT</bcp14> reject a record for carrying one.</t>
+<t><spanx style="verb">expired</spanx> and <spanx style="verb">revoked</spanx> exist because a resolution profile requires that a binding past <spanx style="verb">expiresAt</spanx>, or revoked, <bcp14>MUST NOT</bcp14> be treated as current <xref target="RAR"/>; a resolver that honours that rule has an answer it may not use, which is an <spanx style="verb">error</spanx> claim, never an <spanx style="verb">absent</spanx> one, and the outcome records which.</t>
+
+<t>A <spanx style="verb">present</spanx> or <spanx style="verb">absent</spanx> claim <bcp14>MAY</bcp14> use its status as its outcome, which is the least specific honest answer. Bare names are reserved for values seeded in this document and its successors; any party introducing another <bcp14>MUST</bcp14> namespace it with a reverse-DNS or URI prefix, as for finding kinds (Section 13). A consumer <bcp14>MUST</bcp14> treat an unknown outcome as informational and <bcp14>MUST NOT</bcp14> reject a record for carrying one.</t>
 
 <t><strong>An outcome <bcp14>MUST NOT</bcp14> affect which claims enter the diff.</strong> <spanx style="verb">status</spanx> alone decides that. Outcome is provenance, and were it to filter, a source could remove itself from comparison by describing itself.</t>
 
@@ -211,6 +225,8 @@ appear in all capitals, as shown here.</t>
 
 <t>A value that is not a URI is compared unchanged. Guessing at a syntax the layer does not recognize is worse than comparing it literally.</t>
 
+<t>A view <bcp14>MAY</bcp14> additionally carry a <strong>lease position</strong>: the binding's <spanx style="verb">sequence</spanx> and authority scope (Section 2). The position is not a field; it <bcp14>MUST NOT</bcp14> be compared as a value and <bcp14>MUST NOT</bcp14> appear in <spanx style="verb">values</spanx> of any finding. It is read by the supersession rule of Section 6.4. The authority issuer likewise <bcp14>MUST NOT</bcp14> be a compared field: two sources validating the same subject through different issuers is the ordinary multi-registry case, and a disagreement between issuers is not a disagreement about the subject.</t>
+
 <t>Where a field carries its own proof (a signed record's DID, a key), the resolver <bcp14>MUST</bcp14> populate it only from a successfully verified artifact whose subject binds to the outer agent identifier; on any verification failure the field is null. A verifier <bcp14>MUST NOT</bcp14> allow an unverified value to produce a divergence finding against a verified one (the no-laundering rule).</t>
 
 </section>
@@ -225,7 +241,7 @@ appear in all capitals, as shown here.</t>
 </section>
 <section anchor="field-divergence"><name>Field Divergence</name>
 
-<t>For each field name appearing in any present view, collect the non-null values keyed by (source, vantage). Comparison is scoped to a <strong>cohort</strong>: the claims sharing one vantage identifier.</t>
+<t>For each field name appearing in any <strong>current</strong> present view (Section 6.4), collect the non-null values keyed by (source, vantage). Comparison is scoped to a <strong>cohort</strong>: the claims sharing one vantage identifier.</t>
 
 <t><list style="numbers" type="1">
   <t>A source contributes a single value to the comparison for a field only when all non-null values that source produced for that field agree across its observed vantages. Such a source participates in every cohort.</t>
@@ -242,6 +258,17 @@ appear in all capitals, as shown here.</t>
 <t>For each source observed from more than one vantage, if that source's vantages yield differing non-null values for any field, emit a <spanx style="verb">source_equivocation</spanx> finding attributing that source. Detail: <spanx style="verb">{source, field, values}</spanx> where <spanx style="verb">values</spanx> maps vantage labels to values. The finding is emitted whether or not the variation was declared (Section 9); its per-vantage values are carried in the record for audit.</t>
 
 <t>Absent an applicable Answer Scope, a source under <spanx style="verb">source_equivocation</spanx> for a field contributes no single agreed value to the Section 6.2 comparison for that field: a source that disagrees with itself cannot corroborate. Where an Answer Scope applies (Section 9.3), that withholding is <strong>replaced, not waived</strong>: the source's per-vantage values enter the cohort comparison of Section 6.2 instead. <strong>This rule is central:</strong> withholding the source without replacing it would let a source that declares variation serve one vantage a forged value and be recorded <spanx style="verb">AGREE</spanx>, because nothing would remain to compare that value against, strictly worse than not honouring the declaration at all.</t>
+
+</section>
+<section anchor="supersession"><name>Supersession</name>
+
+<t>Before Sections 6.2 and 6.3 are evaluated, the present claims are partitioned by authority scope. Claims whose view carries no lease position are <strong>current</strong> in their own right. Within each scope the highest <spanx style="verb">sequence</spanx> observed is current; a claim whose <spanx style="verb">sequence</spanx> is lower is <strong>superseded</strong>.</t>
+
+<t>For each (source, scope) with a superseded claim, emit a <spanx style="verb">stale_binding</spanx> finding attributing that source. Detail: <spanx style="verb">{source, scope, sequence, current_sequence, current_on}</spanx>, where <spanx style="verb">current_on</spanx> lists the sources at the current sequence. A superseded claim <bcp14>MUST</bcp14> be withheld from Sections 6.2 and 6.3: a source serving yesterday's binding is behind, not disagreeing, and comparing its target against the current one would report propagation as tampering. A source that is current from one vantage and superseded from another is mid-propagation and <bcp14>MUST NOT</bcp14> be charged <spanx style="verb">source_equivocation</spanx> for that reason alone. A superseded claim remains <spanx style="verb">present</spanx> for Section 6.1 and remains decisive for the verdict (Section 10): the subject exists on that source.</t>
+
+<t>Equal sequences with differing values are the disagreement supersession exists to isolate, and <bcp14>MUST</bcp14> still yield a field finding.</t>
+
+<t><spanx style="verb">stale_binding</spanx> is a finding: the verdict is <spanx style="verb">DIVERGENT</spanx>. A lagging source within the staleness window is <spanx style="verb">suspected</spanx> (Section 7); one still behind after it is <spanx style="verb">confirmed</spanx>, which is the replay and stale-cache condition the resolution profile's security considerations name <xref target="RAR"/>. What a confirmed stale binding is worth is the consumer's judgement, as for every finding. The identity of the finding (Section 7.1) is (source, scope), never the sequence numbers: a source that stays one step behind a moving current is one persistent condition.</t>
 
 </section>
 </section>
@@ -267,13 +294,15 @@ appear in all capitals, as shown here.</t>
       <c><spanx style="verb">source</spanx>, <spanx style="verb">field</spanx></c>
       <c><spanx style="verb">scope_violation</spanx></c>
       <c><spanx style="verb">source</spanx>, <spanx style="verb">field</spanx>, <spanx style="verb">declared_class</spanx></c>
+      <c><spanx style="verb">stale_binding</spanx></c>
+      <c><spanx style="verb">source</spanx>, <spanx style="verb">scope</spanx></c>
       <c>a view field name</c>
       <c><spanx style="verb">field</spanx>, the participating source labels, and the cohort</c>
       <c>any other kind</c>
       <c>the whole <spanx style="verb">detail</spanx></c>
 </texttable>
 
-<t><strong>Observed values <bcp14>MUST NOT</bcp14> participate in the identity.</strong> Values change while the same disagreement persists, and keying on them makes a source that rotates its answer produce a stream of unrelated findings, each restarting as <spanx style="verb">suspected</spanx> and never reaching <spanx style="verb">confirmed</spanx>. That is the staleness abuse of Section 14, made worse: the pattern does not accumulate under one identity either, so even the count of short-lived divergences from one source is diluted.</t>
+<t><strong>Observed values <bcp14>MUST NOT</bcp14> participate in the identity.</strong> Values change while the same disagreement persists, and keying on them makes a source that rotates its answer produce a stream of unrelated findings, each restarting as <spanx style="verb">suspected</spanx> and never reaching <spanx style="verb">confirmed</spanx>. That is the staleness abuse of Section 15, made worse: the pattern does not accumulate under one identity either, so even the count of short-lived divergences from one source is diluted.</t>
 
 <t><strong>The cohort <bcp14>MUST</bcp14> participate</strong> wherever the comparison was scoped (Section 6.2). The same sources can disagree differently in two contexts, and without the cohort one of those disagreements masks the other.</t>
 
@@ -379,7 +408,7 @@ appear in all capitals, as shown here.</t>
 
 <t>A source that varies a field contrary to an Answer Scope it <em>previously</em> published, most plainly one whose scope asserted no variation, is not merely exhibiting an undeclared divergence. It has published a constraint and violated it. A corroborator <bcp14>MUST</bcp14> emit a <spanx style="verb">scope_violation</spanx> finding attributing that source. Detail: <spanx style="verb">{source, field, declared_class, observed, declaration_version}</spanx>.</t>
 
-<t><strong>The temporal rule is not optional.</strong> A corroborator <bcp14>MUST NOT</bcp14> emit <spanx style="verb">scope_violation</spanx> unless it can establish that the scope it evaluated was published <em>before</em> the observation it contradicts. Section 9.4 prevents a source retroactively legitimizing a past divergence by publishing a broader scope; the same reasoning applies in the opposite direction, and with a different victim. Without the temporal rule, a narrower scope published after the fact, by the source under duress, or by anyone who can influence what a sweeper fetches, manufactures an accusation about an observation that did not violate anything at the time it was made. Establishing publication order requires a witnessed history of what a source published when, which this document places out of scope (Section 14); until a deployment has one, it <bcp14>MUST NOT</bcp14> emit this kind.</t>
+<t><strong>The temporal rule is not optional.</strong> A corroborator <bcp14>MUST NOT</bcp14> emit <spanx style="verb">scope_violation</spanx> unless it can establish that the scope it evaluated was published <em>before</em> the observation it contradicts. Section 9.4 prevents a source retroactively legitimizing a past divergence by publishing a broader scope; the same reasoning applies in the opposite direction, and with a different victim. Without the temporal rule, a narrower scope published after the fact, by the source under duress, or by anyone who can influence what a sweeper fetches, manufactures an accusation about an observation that did not violate anything at the time it was made. Establishing publication order requires a witnessed history of what a source published when, which this document places out of scope (Section 15); until a deployment has one, it <bcp14>MUST NOT</bcp14> emit this kind.</t>
 
 <t>A deployment that does have one records its evidence in the finding's <spanx style="verb">detail</spanx> under <spanx style="verb">history_proof</spanx>, so that the finding is independently auditable without this document standardizing any particular mechanism:</t>
 
@@ -407,7 +436,7 @@ appear in all capitals, as shown here.</t>
 
 <figure><artwork><![CDATA[
 {
-  "version": "corroboration/0.3",
+  "version": "corroboration/0.4",
   "alg": "EdDSA",
   "record_id": "<CORR-DIGEST of the object minus these two fields>",
   "subject": { "agent_id": "<id>", "did": "<did:key or null>" },
@@ -418,10 +447,12 @@ appear in all capitals, as shown here.</t>
     { "source": "<label>", "vantage": "<label or null>",
       "status": "present" | "absent" | "error",
       "view": { "<field>": "<value or null>", ... } | null,
-      "outcome": "<see Section 4.1>" }
+      "outcome": "<see Section 4.1>",
+      "binding": { "sequence": <integer>,
+                   "scope": "<issuer or null>" } }
   ],
   "findings": [
-    { "kind": "<see Section 12>", "agent_id": "<id>",
+    { "kind": "<see Section 13>", "agent_id": "<id>",
       "confirmation": "suspected" | "confirmed",
       "declared": true | false,
       "declaration_version": <integer or null>,
@@ -447,23 +478,51 @@ appear in all capitals, as shown here.</t>
   <t><spanx style="verb">claims</spanx> <bcp14>MUST</bcp14> include <spanx style="verb">error</spanx>-status entries (excluded from the diff, preserved for audit).</t>
   <t>A consumer binding a Corroboration Record from another evidence format <bcp14>SHOULD</bcp14> bind <spanx style="verb">record_id</spanx> and <bcp14>SHOULD</bcp14> state the verdict it relied upon.</t>
   <t>The verdict <bcp14>MUST</bcp14> be computed as follows, and only as follows. The verdict is <spanx style="verb">INSUFFICIENT</spanx> if and only if the record contains fewer than two <spanx style="verb">present</spanx>-or-<spanx style="verb">absent</spanx> claims. Otherwise the verdict is <spanx style="verb">DIVERGENT</spanx> if and only if <spanx style="verb">findings</spanx> is non-empty, and <spanx style="verb">AGREE</spanx> otherwise. A <spanx style="verb">declared</spanx> annotation on a finding (Section 9.4) does not affect this computation.</t>
-  <t><spanx style="verb">observed_at</spanx> is the observation time of every claim in the record. Claims do not carry individual timestamps; a deployment whose sweeps span a period long enough for that to matter <bcp14>SHOULD</bcp14> shorten its sweeps rather than reinterpret this field (Section 14).</t>
+  <t><spanx style="verb">observed_at</spanx> is the observation time of every claim in the record. Claims do not carry individual timestamps; a deployment whose sweeps span a period long enough for that to matter <bcp14>SHOULD</bcp14> shorten its sweeps rather than reinterpret this field (Section 15).</t>
   <t><spanx style="verb">answer_scopes</spanx> <bcp14>MUST</bcp14> list every Answer Scope the sweep relied upon, and <bcp14>MUST</bcp14> be present and empty when it relied on none. "No scope applied" and "this implementation does not record scopes" are different facts, and a verifier that cannot distinguish them cannot know whether a record is complete. Each entry <bcp14>MUST</bcp14> carry <spanx style="verb">scope_digest</spanx>, the CORR-DIGEST of the verified bundle, and <bcp14>SHOULD</bcp14> carry <spanx style="verb">scopes</spanx>. <strong>This rule is central:</strong> <spanx style="verb">declared</spanx> with a sequence number states that a scope was matched without stating which rule was matched or which bytes the sequence refers to, so a verifier holding only the record could not reproduce the decision. The digest binds the decision to specific bytes; carrying <spanx style="verb">scopes</spanx> as well spares a verifier that does not already hold the bundle from a fetch, which is what offline verification exists to avoid. A finding with <spanx style="verb">declared: true</spanx> is re-derived by locating the entry whose <spanx style="verb">label</spanx> equals the finding's source and whose <spanx style="verb">seq</spanx> equals its <spanx style="verb">declaration_version</spanx>.</t>
   <t><spanx style="verb">declared</spanx> <bcp14>MUST</bcp14> be present on every finding, defaulting to <spanx style="verb">false</spanx>; <spanx style="verb">declaration_version</spanx> <bcp14>MUST</bcp14> carry the matched <spanx style="verb">seq</spanx> when <spanx style="verb">declared</spanx> is <spanx style="verb">true</spanx> and <bcp14>MUST</bcp14> be null otherwise. Neither member participates in any dedup or first-observation key a consumer maintains, they describe what the source had published, not which disagreement was observed, and a source publishing or revising a declaration <bcp14>MUST NOT</bcp14> change the identity of a finding already being tracked.</t>
-  <t>A verifier <bcp14>MUST</bcp14> check <spanx style="verb">version</spanx> against the set of record versions it accepts and <bcp14>MUST</bcp14> reject any other. A verifier consuming records issued before this revision <bcp14>MUST</bcp14> accept <spanx style="verb">corroboration/0.1</spanx> and <spanx style="verb">corroboration/0.2</spanx> alongside <spanx style="verb">corroboration/0.3</spanx>; for those versions the absence of <spanx style="verb">declared</spanx> is read as <spanx style="verb">false</spanx> and the absence of <spanx style="verb">alg</spanx> as <spanx style="verb">EdDSA</spanx>.</t>
+  <t>A verifier <bcp14>MUST</bcp14> check <spanx style="verb">version</spanx> against the set of record versions it accepts and <bcp14>MUST</bcp14> reject any other. A verifier consuming records issued before this revision <bcp14>MUST</bcp14> accept <spanx style="verb">corroboration/0.1</spanx>, <spanx style="verb">corroboration/0.2</spanx> and <spanx style="verb">corroboration/0.3</spanx> alongside <spanx style="verb">corroboration/0.4</spanx>; for those versions the absence of <spanx style="verb">declared</spanx> is read as <spanx style="verb">false</spanx>, the absence of <spanx style="verb">alg</spanx> as <spanx style="verb">EdDSA</spanx>, and the absence of <spanx style="verb">binding</spanx> as no lease position.</t>
+  <t>A claim entry whose view carries a lease position (Section 5) <bcp14>MUST</bcp14> carry <spanx style="verb">binding</spanx> with that position's <spanx style="verb">sequence</spanx> and <spanx style="verb">scope</spanx>; an entry whose view carries none <bcp14>MUST</bcp14> omit the member. A <spanx style="verb">stale_binding</spanx> finding names the sequences it compared; the claim entries are where a verifier re-derives that comparison from recorded bytes, and a verifier <bcp14>MUST</bcp14> reject a record whose <spanx style="verb">stale_binding</spanx> findings do not follow from its <spanx style="verb">binding</spanx> members under Section 6.4.</t>
 </list></t>
 
 </section>
 <section anchor="reference-layer-instantiations"><name>Reference Layer Instantiations</name>
 
-<t><strong>Discovery</strong>: view <spanx style="verb">{endpoint, did}</spanx>. Resolvers: a by-id HTTP registry resolver (<spanx style="verb">GET {base}/api/agents/{id}</spanx>, path injectable); a two-hop index resolver (resolve a locator to <spanx style="verb">{registry_url, identifier}</spanx>, then fetch the record; a missing or empty hop field yields an <spanx style="verb">error</spanx> claim, a not-found at either hop is <spanx style="verb">absent</spanx>). The <spanx style="verb">did</spanx> field is populated only per Section 5's verified-field rule, from a signed record verified offline against its embedded <spanx style="verb">did:key</spanx>, with subject binding to the outer id.</t>
+<t><strong>Discovery</strong>: view <spanx style="verb">{endpoint, did, digest}</spanx>, with a lease position. Resolvers:</t>
+
+<t><list style="symbols">
+  <t>a <strong>known-subject resolver</strong> for a Resolution Registry implementing registry-assisted resolution of a Known Subject <xref target="RAR"/> (<spanx style="verb">POST {base}/resolve</spanx> with the Subject Identity and its type; one hop; the target is terminal). An empty <spanx style="verb">targets</spanx> array and a <spanx style="verb">404</spanx> are <spanx style="verb">absent</spanx>; a target past <spanx style="verb">expiresAt</spanx>, lacking it, lacking <spanx style="verb">sequence</spanx>, or marked revoked is <spanx style="verb">error</spanx> with outcome <spanx style="verb">expired</spanx>, <spanx style="verb">unverifiable</spanx> or <spanx style="verb">revoked</spanx>; a target whose method was not accepted, in particular another registry, which the profile forbids as a terminal target, is <spanx style="verb">error</spanx>/<spanx style="verb">refused</spanx>; a Problem Details <xref target="RFC9457"/> <spanx style="verb">code</spanx> maps onto the outcome vocabulary of Section 4.1. <spanx style="verb">targetUrl</spanx> is the endpoint, <spanx style="verb">targetDigest</spanx> the digest, and <spanx style="verb">sequence</spanx> with <spanx style="verb">authority.issuer</spanx> the lease position. The resolver does not evaluate Authority Evidence and does not follow a target to another registry;</t>
+  <t>a <strong>by-id HTTP registry resolver</strong> (<spanx style="verb">GET {base}/api/agents/{id}</spanx>, path injectable);</t>
+  <t>a <strong>two-hop index resolver</strong>, retained for sources still exposing that shape (resolve a locator to <spanx style="verb">{registry_url, identifier}</spanx>, then fetch the record; a missing or empty hop field yields an <spanx style="verb">error</spanx> claim, a not-found at either hop is <spanx style="verb">absent</spanx>). Under the known-subject profile a registry returns a terminal target and never another registry, so an index is one source among several and this shape is not used.</t>
+</list></t>
+
+<t>The <spanx style="verb">did</spanx> field is populated only per Section 5's verified-field rule, from a signed record verified offline against its embedded <spanx style="verb">did:key</spanx>, with subject binding to the outer id. The <spanx style="verb">digest</spanx> field is compared only where both sides carry one; two sources agreeing on an endpoint and disagreeing on its digest have resolved to one host serving two documents, which is substitution at the host rather than at the source, a condition the endpoint comparison cannot express.</t>
 
 <t><strong>Identity</strong>: view <spanx style="verb">{key}</spanx>, the agent's Ed25519 verification key, represented in <spanx style="verb">did:key</spanx> multibase form (the encoding shared by <spanx style="verb">did:key</spanx> identifiers and <spanx style="verb">Ed25519VerificationKey2020</spanx> <xref target="EDSIG2020"/> <spanx style="verb">publicKeyMultibase</spanx>, so keys compare as strings). Resolvers: <spanx style="verb">did:key</spanx> (offline; the self-certifying root), <spanx style="verb">did:web</spanx> (fetched from the method-specified document location; <spanx style="verb">404</spanx> is <spanx style="verb">absent</spanx>), and a Universal Resolver adapter. A method serving a different key than the root is a <spanx style="verb">key</spanx> divergence.</t>
 
 </section>
+<section anchor="relationship-to-registry-assisted-resolution"><name>Relationship to Registry-Assisted Resolution of Known Subjects</name>
+
+<t>Registry-assisted resolution <xref target="RAR"/> specifies how a discovering entity that already knows a Subject Identity, and has no usable DNS discovery anchor for it, obtains from one client-selected Resolution Registry the minimum information needed to continue discovery, together with registry provenance, subject-specific authority evidence, and a renewable binding carrying sequence, validity bounds and revocation information. It is deliberately narrow: no search, no ranking, no global root, no registry-to-registry forwarding, no trust evaluation. It also leaves open how a client that holds bindings from several registries notices that they disagree, and names a transparency mechanism for conflicting or malicious bindings as an open question.</t>
+
+<t>This document is that mechanism, and the two compose without either widening its scope:</t>
+
+<t><list style="symbols">
+  <t><strong>Resolution is one source's answer; corroboration is the comparison.</strong> A Resolution Registry is a source in the sense of Section 2, and each binding it returns is one claim. A Corroboration Record is the artifact a client, or an auditor acting for many clients, produces from two or more such claims.</t>
+  <t><strong>No forwarding is needed.</strong> Corroboration is performed by the party holding the claims. The registries need not communicate, synchronize or route, and the prohibition on inter-registry forwarding is preserved exactly; it is the sweeper that queries each configured registry directly.</t>
+  <t><strong>The sweeper is an auditor over a bounded set.</strong> The resolution profile forbids unbounded registry fan-out and requires exact lookup without enumeration. A corroboration sweep satisfies both: its source set is the explicitly configured set of Section 2, it issues one exact resolution request per source per subject, and it enumerates nothing. A deployment <bcp14>MUST NOT</bcp14> use a sweep to discover registries or subjects it was not configured with.</t>
+  <t><strong>Lease sequence is the supersession signal.</strong> The binding's <spanx style="verb">sequence</spanx> within its authority scope is read by Section 6.4, so a registry serving a superseded binding is attributed as <spanx style="verb">stale_binding</spanx> and never compared against the current one. This is the mechanism by which "two registries disagree" is distinguished from "one registry is behind", which the resolution profile's freshness rules require a resolver to handle and which a naive comparison would report as tampering.</t>
+  <t><strong>The direct path is a source.</strong> Where a validated direct DNS-anchored discovery path exists, the resolution profile requires it to remain direct and forbids silent downgrade to a weaker registry result. A corroborator <bcp14>MAY</bcp14> treat the direct path as one source beside the registries: a registry result that diverges from a current direct result is then a finding attributing the registry, which is the detector that downgrade rule otherwise lacks.</t>
+  <t><strong>Authority Evidence is provenance, never verdict.</strong> The resolution profile separates registry provenance from subject authority and leaves acceptability of authority evidence to local policy. This document carries the authority issuer as the scope a sequence counts in and <bcp14>MUST NOT</bcp14> let it move the verdict: a corroborator that preferred the claim with the stronger authority would be performing the trust evaluation that both the DAWN charter <xref target="DAWN-CHARTER"/> and the resolution profile exclude. The issuer <bcp14>MAY</bcp14> annotate a finding for the consumer, as <spanx style="verb">declared</spanx> annotates one (Section 9.4).</t>
+  <t><strong>Answer Scope and target scope.</strong> The resolution profile's optional per-target <spanx style="verb">scope</spanx> (a bounded audience, role or deployment) is the registry-side counterpart of the source-published Answer Scope of Section 9: both declare, in advance, that an answer is intended to vary along a stated dimension. A deployment that corroborates scoped targets <bcp14>SHOULD</bcp14> align the Answer Scope vantage class with the target scope dimension so that the cohort comparison of Section 6.2 compares like with like.</t>
+</list></t>
+
+<t>Nothing here changes what either document requires of a single registry or a single resolution. Corroboration adds obligations only to the party that chooses to hold several answers and say so.</t>
+
+</section>
 <section anchor="finding-kinds-and-extensibility"><name>Finding Kinds and Extensibility</name>
 
-<t>Kinds seeded by this document: <spanx style="verb">omission</spanx>, <spanx style="verb">source_equivocation</spanx>, <spanx style="verb">scope_violation</spanx>, <spanx style="verb">stale_description</spanx>, <spanx style="verb">agent_equivocation</spanx>, and one kind per view field name of a layer defined by this document or by an extension specification (this document seeds <spanx style="verb">endpoint</spanx>, <spanx style="verb">did</spanx>, <spanx style="verb">key</spanx>). Bare (un-prefixed) kind names are reserved for values seeded in this document and its successors; any party introducing a new kind <bcp14>MUST</bcp14> namespace it with a reverse-DNS or URI prefix. A consumer <bcp14>MUST</bcp14> treat unknown kinds as informational and <bcp14>MUST NOT</bcp14> reject a record for carrying one.</t>
+<t>Kinds seeded by this document: <spanx style="verb">omission</spanx>, <spanx style="verb">source_equivocation</spanx>, <spanx style="verb">scope_violation</spanx>, <spanx style="verb">stale_description</spanx>, <spanx style="verb">stale_binding</spanx>, <spanx style="verb">agent_equivocation</spanx>, and one kind per view field name of a layer defined by this document or by an extension specification (this document seeds <spanx style="verb">endpoint</spanx>, <spanx style="verb">did</spanx>, <spanx style="verb">digest</spanx>, <spanx style="verb">key</spanx>). Bare (un-prefixed) kind names are reserved for values seeded in this document and its successors; any party introducing a new kind <bcp14>MUST</bcp14> namespace it with a reverse-DNS or URI prefix. A consumer <bcp14>MUST</bcp14> treat unknown kinds as informational and <bcp14>MUST NOT</bcp14> reject a record for carrying one.</t>
 
 </section>
 <section anchor="conformance"><name>Conformance</name>
@@ -501,6 +560,20 @@ appear in all capitals, as shown here.</t>
       <c>the same finding identity; confirmation advances</c>
       <c>the same sources disagreeing in two cohorts</c>
       <c>two findings, distinct identities</c>
+      <c>two sources, same scope, sequences 13 and 14, differing endpoints</c>
+      <c><spanx style="verb">stale_binding</spanx> attributing the source at 13; no <spanx style="verb">endpoint</spanx> finding</c>
+      <c>two sources, same scope, equal sequences, differing endpoints</c>
+      <c><spanx style="verb">endpoint</spanx> field divergence</c>
+      <c>two sources, different scopes, unrelated sequences, equal values</c>
+      <c>no finding</c>
+      <c>a source current from one vantage and superseded from another</c>
+      <c><spanx style="verb">stale_binding</spanx>; no <spanx style="verb">source_equivocation</spanx></c>
+      <c>a superseded source beside an <spanx style="verb">absent</spanx> source</c>
+      <c><spanx style="verb">omission</spanx> lists the superseded source as <spanx style="verb">present_on</spanx></c>
+      <c>a binding past <spanx style="verb">expiresAt</spanx></c>
+      <c><spanx style="verb">error</spanx> with outcome <spanx style="verb">expired</spanx>; no <spanx style="verb">omission</spanx></c>
+      <c>equal endpoints, differing digests</c>
+      <c><spanx style="verb">digest</spanx> field divergence</c>
 </texttable>
 
 <t>Answer Scope support is <bcp14>OPTIONAL</bcp14>. An implementation that does not support it conforms: with no declaration supplied, Section 6.2 yields a single cohort spanning every claim, and the procedure is identical to one with no notion of declaration. An implementation that <em>does</em> support it <bcp14>MUST NOT</bcp14> report <spanx style="verb">AGREE</spanx> for a sweep in which a declared-varying source's cohort disagrees, the redirection of Section 6.3 is not optional for an implementation that honors declarations at all, because honouring the declaration without it is strictly less safe than ignoring the declaration.</t>
@@ -518,6 +591,10 @@ appear in all capitals, as shown here.</t>
 
 <t><strong>Sweeper honesty.</strong> A record attests the sweep's recorded observations, not the sweeper's honesty; a dishonest sweeper can sign a fiction. Anchoring bounds timing and prevents silent substitution; consumers with high assurance requirements <bcp14>SHOULD</bcp14> corroborate the corroborator, multiple independent sweepers over the same watch set, which this procedure supports without modification (sweep records are themselves views to diff).</t>
 
+<t><strong>Fan-out and enumeration.</strong> A sweep issues one request per configured source per watched subject. A sweeper configured with many sources, or watching many subjects, is indistinguishable from a scraper to the registries it queries, and the resolution profile treats exact-lookup endpoints as denial-of-service and enumeration targets. A deployment <bcp14>SHOULD</bcp14> rate-limit its own sweeps, <bcp14>SHOULD</bcp14> prefer a watch set the subjects consented to or the sweeper operates for, and <bcp14>MUST NOT</bcp14> derive subjects or sources from a registry's responses. Query fan-out reveals which subjects a sweeper watches to every registry it asks; a deployment with a privacy obligation <bcp14>SHOULD</bcp14> treat the watch set as sensitive.</t>
+
+<t><strong>Authority laundering.</strong> A corroborator that accepted the registry's own statement of a target's authority as a reason to prefer that target would let a registry win a comparison by asserting authority. Authority evidence is never evaluated by this procedure and never moves the verdict (Section 12); where a consumer evaluates it, the consumer does so against the recorded claims after the fact.</t>
+
 <t><strong>Staleness abuse.</strong> An attacker aware of the staleness window can rotate lies faster than confirmation. <spanx style="verb">suspected</spanx> findings therefore <bcp14>MUST</bcp14> be preserved in records even when never confirmed; a pattern of unconfirmed, short-lived divergences from one source is itself signal, and its evaluation is consumer policy.</t>
 
 <t><strong>Self-description replay and squatting.</strong> Addressed structurally in Section 8 (supersession, corroborated distribution, verify-back); implementations <bcp14>MUST NOT</bcp14> skip the verify-back rule, which is the sole defense against alias squatting manufacturing false divergences.</t>
@@ -531,7 +608,7 @@ appear in all capitals, as shown here.</t>
 </section>
 <section anchor="iana-considerations"><name>IANA Considerations</name>
 
-<t>This document requests no IANA actions. The finding-kind vocabulary is governed by the namespacing convention of Section 12; this document defines the claim outcomes of Section 4.1, the endpoint canonicalization profile <spanx style="verb">endpoint-normalization/0.1</spanx> of Section 5, and defines <spanx style="verb">region</spanx> and <spanx style="verb">asn</spanx> as the initial occupiable vantage classes, with the value spaces given in Section 3.1, and a future revision <bcp14>MAY</bcp14> establish an IANA registry for further classes should the set need to grow outside this document and its successors; the record and self-description <spanx style="verb">version</spanx> strings are governed by this document and its successors. A future revision <bcp14>MAY</bcp14> register a media type for the Corroboration Record (candidate: <spanx style="verb">application/corroboration-record+json</spanx>) once transport contexts warrant it.</t>
+<t>This document requests no IANA actions. The finding-kind vocabulary is governed by the namespacing convention of Section 13; this document defines the claim outcomes of Section 4.1, the endpoint canonicalization profile <spanx style="verb">endpoint-normalization/0.1</spanx> of Section 5, and defines <spanx style="verb">region</spanx> and <spanx style="verb">asn</spanx> as the initial occupiable vantage classes, with the value spaces given in Section 3.1, and a future revision <bcp14>MAY</bcp14> establish an IANA registry for further classes should the set need to grow outside this document and its successors; the record and self-description <spanx style="verb">version</spanx> strings are governed by this document and its successors. A future revision <bcp14>MAY</bcp14> register a media type for the Corroboration Record (candidate: <spanx style="verb">application/corroboration-record+json</spanx>) once transport contexts warrant it.</t>
 
 </section>
 
@@ -769,6 +846,80 @@ appear in all capitals, as shown here.</t>
   </front>
 </reference>
 
+<reference anchor="RFC9457" target="https://www.rfc-editor.org/info/rfc9457">
+  <front>
+    <title>Problem Details for HTTP APIs</title>
+    <author fullname="M. Nottingham" initials="M." surname="Nottingham"/>
+    <author fullname="E. Wilde" initials="E." surname="Wilde"/>
+    <author fullname="S. Dalal" initials="S." surname="Dalal"/>
+    <date month="July" year="2023"/>
+  </front>
+  <seriesInfo name="RFC" value="9457"/>
+  <seriesInfo name="DOI" value="10.17487/RFC9457"/>
+</reference>
+
+<reference anchor="DAWN-CHARTER" target="https://datatracker.ietf.org/doc/charter-ietf-dawn/">
+  <front>
+    <title>Discovery of Agents With Names (DAWN) Charter</title>
+    <author>
+      <organization>IETF</organization>
+    </author>
+    <date year="2026" month="October"/>
+  </front>
+  <seriesInfo name="Charter" value="charter-ietf-dawn-01"/>
+</reference>
+
+<reference anchor="DAWN-TERMINOLOGY" target="https://datatracker.ietf.org/doc/draft-farrel-dawn-terminology/">
+  <front>
+    <title>Terminology for the Discovery of Agents With Names (DAWN)</title>
+    <author initials="A." surname="Farrel">
+      <organization></organization>
+    </author>
+    <author initials="K." surname="Yao">
+      <organization></organization>
+    </author>
+    <author initials="R." surname="Schott">
+      <organization></organization>
+    </author>
+    <author initials="N." surname="Williams">
+      <organization></organization>
+    </author>
+    <date year="2026" month="October"/>
+  </front>
+  <seriesInfo name="Internet-Draft" value="draft-farrel-dawn-terminology-06"/>
+</reference>
+
+<reference anchor="DAWN-REQS" target="https://datatracker.ietf.org/doc/draft-king-dawn-requirements/">
+  <front>
+    <title>Requirements for the Discovery of Agents With Names (DAWN)</title>
+    <author initials="D." surname="King">
+      <organization></organization>
+    </author>
+    <author initials="A." surname="Farrel">
+      <organization></organization>
+    </author>
+    <date year="2026" month="October"/>
+  </front>
+  <seriesInfo name="Internet-Draft" value="draft-king-dawn-requirements-02"/>
+</reference>
+
+<reference anchor="RAR" target="https://datatracker.ietf.org/doc/draft-raskar-agentic-web-federated-resolution/">
+  <front>
+    <title>Registry-Assisted Resolution for Known Subjects Without DNS Discovery Anchors</title>
+    <author initials="R." surname="Raskar">
+      <organization></organization>
+    </author>
+    <author initials="S." surname="Sharaf">
+      <organization></organization>
+    </author>
+    <author initials="P." surname="Chari">
+      <organization></organization>
+    </author>
+    <date year="2026" month="October"/>
+  </front>
+  <seriesInfo name="Internet-Draft" value="draft-raskar-agentic-web-federated-resolution-02"/>
+</reference>
+
 
     </references>
 
@@ -783,6 +934,16 @@ appear in all capitals, as shown here.</t>
   <t><strong>Section 4.1 (new).</strong> Claim outcomes become a seeded vocabulary: <spanx style="verb">timeout</spanx>, <spanx style="verb">unreachable</spanx>, <spanx style="verb">refused</spanx>, <spanx style="verb">unparseable</spanx>, <spanx style="verb">unverifiable</spanx>, with the namespacing rule already used for finding kinds. <spanx style="verb">-01</spanx> left the member free-form, which would have produced incomparable strings for the same condition across implementations. States that an outcome <bcp14>MUST NOT</bcp14> affect which claims enter the diff.</t>
   <t><strong>Section 10.</strong> The record carries <spanx style="verb">alg</spanx>, the JOSE/COSE identifier of the signature algorithm, and a verifier <bcp14>MUST</bcp14> derive the algorithm from the key type the <spanx style="verb">sweeper</spanx> <spanx style="verb">did:key</spanx> encodes and reject a record whose <spanx style="verb">alg</spanx> disagrees. <spanx style="verb">-01</spanx> named no algorithm at all, so a verifier had to know it out of band and a second algorithm could not be introduced without silently changing what every existing record meant. Record version becomes <spanx style="verb">corroboration/0.3</spanx>; <spanx style="verb">alg</spanx> is <bcp14>REQUIRED</bcp14> from it and implied <spanx style="verb">EdDSA</spanx> before it.</t>
   <t><strong>Section 15.</strong> Records that the claim outcomes are governed by this document.</t>
+  <t><strong>Section 2.</strong> Defines <strong>Binding</strong>: a source's subject-to-target association as a renewable lease with a <spanx style="verb">sequence</spanx> per authority scope, and distinguishes it from the self-description <spanx style="verb">seq</spanx>. Aligns the definition of source with DAWN terminology.</t>
+  <t><strong>Section 4.1.</strong> Seeds <spanx style="verb">expired</spanx> and <spanx style="verb">revoked</spanx> outcomes: a binding the resolution profile forbids treating as current is an <spanx style="verb">error</spanx> claim, never <spanx style="verb">absent</spanx>.</t>
+  <t><strong>Section 5.</strong> A view <bcp14>MAY</bcp14> carry a lease position; it is not compared, and neither is the authority issuer.</t>
+  <t><strong>Section 6.4 (new).</strong> Supersession: within one authority scope a claim below the current <spanx style="verb">sequence</spanx> is attributed as <spanx style="verb">stale_binding</spanx> and withheld from field divergence and <spanx style="verb">source_equivocation</spanx>. Lag is attributed, not reported as tampering. Identity is (source, scope).</t>
+  <t><strong>Section 10.</strong> Claim entries carry <spanx style="verb">binding</spanx>; record version becomes <spanx style="verb">corroboration/0.4</spanx>; rule 12 requires <spanx style="verb">stale_binding</spanx> findings to follow from recorded bindings.</t>
+  <t><strong>Section 11.</strong> The discovery view gains <spanx style="verb">digest</spanx>; a known-subject resolver for registry-assisted resolution (<spanx style="verb">POST /resolve</spanx>) is the first discovery resolver; the two-hop index resolver is retained as legacy.</t>
+  <t><strong>Section 12 (new).</strong> States the relationship to registry-assisted resolution of known subjects and the DAWN charter: resolution is one source's answer, corroboration the comparison; no forwarding; bounded fan-out and exact lookup; authority evidence is provenance, never verdict; the direct DNS path as a source; Answer Scope beside target scope.</t>
+  <t><strong>Section 13.</strong> Seeds <spanx style="verb">stale_binding</spanx> and <spanx style="verb">digest</spanx>.</t>
+  <t><strong>Section 14.</strong> Conformance cases for supersession, expiry and digest.</t>
+  <t><strong>Section 15.</strong> Adds <strong>Fan-out and enumeration</strong> and <strong>Authority laundering</strong>.</t>
   <t>Em dashes replaced with commas, colons and parentheses throughout. The document is now ASCII-only, which removes the non-ASCII line-length reports from submission checking.</t>
 </list></t>
 
@@ -818,7 +979,7 @@ appear in all capitals, as shown here.</t>
   <t><strong>Section 7</strong> requires exactly one staleness window per deployment and says why per-source windows are not offered: the record carries a single <spanx style="verb">staleness_window_s</spanx>.</t>
   <t><strong>Section 9.5</strong> requires that a scope be shown to predate the observation it contradicts before <spanx style="verb">scope_violation</spanx> may be emitted, and states that a deployment without a witnessed publication history <bcp14>MUST NOT</bcp14> emit the kind. Without it, a narrower scope published after the fact manufactures an accusation.</t>
   <t><strong>Section 10</strong> states the verdict computation exhaustively, and drops "monetary" from the numeric rule (no monetary fields are defined).</t>
-  <t><strong>Section 12</strong> no longer refers to a "registered layer"; this document defines no layer registry.</t>
+  <t><strong>Section 13</strong> no longer refers to a "registered layer"; this document defines no layer registry.</t>
   <t><strong>Section 4</strong> replaces the language-specific "<bcp14>MUST NOT</bcp14> raise" with a requirement to return an <spanx style="verb">error</spanx> claim.</t>
 </list></t>
 
@@ -827,14 +988,14 @@ appear in all capitals, as shown here.</t>
 
 <t>This appendix is informative. Where it differs from the body of this document, the normative requirements in the body govern; the reference implementation does not define behaviour.</t>
 
-<t>Every normative element of this document is implemented in the reference implementation, split across two packages: the source-agnostic <strong>sm-resolver</strong> kernel (the claim model of Section 3, the view contract of Section 5, the diff of Section 6, and the confirmation discipline of Section 7, producing an unsigned sweep result with the verdict of Section 10) and <strong>sm-divergence</strong> built on it (the reference discovery and identity layers of Section 11, the agent self-description of Section 8, and the signing that seals a sweep result into the Corroboration Record of Section 10). The <spanx style="verb">present</spanx>/<spanx style="verb">absent</spanx>/<spanx style="verb">error</spanx> classification (Section 4), the view contract (Section 5), and the diff (Section 6) are the kernel's stable core; the vantage axis and <spanx style="verb">source_equivocation</spanx> (Sections 3, 6.3), observation time and confirmation (Section 7), the self-description schema and hardening (Section 8), and the Corroboration Record emitted on every verdict (Section 10) are all present and covered by the conformance corpus. The Answer Scope of Section 9 is split the same way: the kernel accepts an already-verified declaration as inert data and performs the cohort comparison of Section 6.2, while fetching, verifying and matching the bundle belong to the layer above, the kernel holds no keys and performs no I/O.</t>
+<t>Every normative element of this document is implemented in the reference implementation, split across two packages: the source-agnostic <strong>sm-resolver</strong> kernel (the claim model of Section 3, the view contract of Section 5, the diff of Section 6, and the confirmation discipline of Section 7, producing an unsigned sweep result with the verdict of Section 10) and <strong>sm-divergence</strong> built on it (the reference discovery and identity layers of Section 11, the agent self-description of Section 8, and the signing that seals a sweep result into the Corroboration Record of Section 10). The relationship stated in Section 12 is implemented as a thin resolver: the kernel never learns the resolution profile, and the profile never learns the comparison. The <spanx style="verb">present</spanx>/<spanx style="verb">absent</spanx>/<spanx style="verb">error</spanx> classification (Section 4), the view contract (Section 5), and the diff (Section 6) are the kernel's stable core; the vantage axis and <spanx style="verb">source_equivocation</spanx> (Sections 3, 6.3), observation time and confirmation (Section 7), the self-description schema and hardening (Section 8), and the Corroboration Record emitted on every verdict (Section 10) are all present and covered by the conformance corpus. The Answer Scope of Section 9 is split the same way: the kernel accepts an already-verified declaration as inert data and performs the cohort comparison of Section 6.2, while fetching, verifying and matching the bundle belong to the layer above, the kernel holds no keys and performs no I/O.</t>
 
-<t>The reference implementation is available as open-source software (MIT License) at https://github.com/Sharathvc23/sm-divergence and https://github.com/Sharathvc23/sm-resolver, and is published on PyPI as <spanx style="verb">sm-divergence</spanx> and <spanx style="verb">sm-resolver</spanx>. This revision corresponds to <spanx style="verb">sm-resolver</spanx> 0.6.0 and <spanx style="verb">sm-divergence</spanx> 0.11.0. The companion informative essay is "The Quilt That Checks Itself" (Stellarminds.ai / Project NANDA research).</t>
+<t>The reference implementation is available as open-source software (MIT License) at https://github.com/Sharathvc23/sm-divergence and https://github.com/Sharathvc23/sm-resolver, and is published on PyPI as <spanx style="verb">sm-divergence</spanx> and <spanx style="verb">sm-resolver</spanx>. This revision corresponds to <spanx style="verb">sm-resolver</spanx> 0.7.0 and <spanx style="verb">sm-divergence</spanx> 0.12.0. The supersession rule of Section 6.4 lives in the kernel (<spanx style="verb">Binding</spanx>, <spanx style="verb">stale_binding</spanx>); the known-subject resolver of Section 11, the <spanx style="verb">digest</spanx> field and the <spanx style="verb">binding</spanx> claim-entry member live in <spanx style="verb">sm-divergence</spanx>. The companion informative essay is "The Quilt That Checks Itself" (Stellarminds.ai / Project NANDA research).</t>
 
 </section>
 <section anchor="related"><name>Related Work</name>
 
-<t>The multi-perspective corroboration pattern this document applies to agent discovery mirrors the CA/Browser Forum's Multi-Perspective Issuance Corroboration <xref target="MPIC"/> for certificate issuance and transparency-log constructions <xref target="RFC6962"/> <xref target="RFC9162"/> <xref target="CONIKS"/>. Adjacent agent-identity work includes Agent Name Service v2 <xref target="ANSV2"/> and SCITT-based evidence profiles <xref target="SCITT"/> <xref target="CAPSULE"/>; this document is complementary, defining the cross-source comparison and record rather than a naming or transparency substrate.</t>
+<t>The multi-perspective corroboration pattern this document applies to agent discovery mirrors the CA/Browser Forum's Multi-Perspective Issuance Corroboration <xref target="MPIC"/> for certificate issuance and transparency-log constructions <xref target="RFC6962"/> <xref target="RFC9162"/> <xref target="CONIKS"/>. Within the IETF, the DAWN working group <xref target="DAWN-CHARTER"/> is chartered for the initial discovery of public properties of AI resources, with integrity for exchanged discovery information in scope and search, identity management and trust evaluation beyond secure exchange out of it; its terminology <xref target="DAWN-TERMINOLOGY"/> and requirements <xref target="DAWN-REQS"/> work frame the vocabulary this document adopts where it applies. Registry-assisted resolution of known subjects <xref target="RAR"/> specifies the single-registry resolution contract, binding lifecycle and provenance model that Section 12 composes with. Adjacent agent-identity work includes Agent Name Service v2 <xref target="ANSV2"/> and SCITT-based evidence profiles <xref target="SCITT"/> <xref target="CAPSULE"/>; this document is complementary to all of these, defining the cross-source comparison and record rather than a discovery mechanism, a naming system or a transparency substrate.</t>
 
 </section>
 
@@ -842,451 +1003,523 @@ appear in all capitals, as shown here.</t>
   </back>
 
 <!-- ##markdown-source:
-H4sIAAAAAAAAA7V9/XIb17Hn/3yKWaa2QnIBSKRk2SJTyTKUnDCxJF9Rtu/d
-WyljgBmSEwEzyMyAFCLrPss+yz7Zdv+6+5w+A1B2stlUSiaA+Tgfffrz193j
-8Xivr/pFeZq9Wi/6anzVrNt5mV00bdvMmjbvq6bOrps2O7/Mzm/Kus9eVN28
-uSvbzV4+m7Xl3enw+/TmvaKZ1/mSXlC0+XU/nt/mNf01zvmmcVveVF3fbsZz
-f8/48cnePO/Lm6bdnGZdX+xVq/Y069t11588fvycfs7bMj/Nrsr5uq36zd59
-076/aZv16jR7Xfb8KfuB/qnqm+wP/PVet54tq66jh/ebFQ3m8uW7r/felxu6
-tDjdy7IxTxBj6vCpCLPkTzZMfEiGim/6Nq+7FQ2pnm/2up4m+GO+aGp6zabs
-9lbVafaffTMfZV3T9m153dFfm6X8MW+WS37pX/bydX/btDKWqu5ocpPsQhaL
-vssyWcSr25xefJv80rQ3eV39HeOhK/pyscjbZVUX3SSvcEW5zKsFraTc/D+7
-HZfQOp5mt32/6k4fPdp1wZzW+TR7W81vl01d4CteFn7lRb6oiEbqSsYzb9Z1
-zzv3XV31ZUEjor3ssuY6O1+WbTXP9+qmXdJw70qe7tuvL06Oj5/rn18df/lU
-/3zy5Il9++T5V8/sgi+/+kL/fPbl8yf85+XVmyfHz3BBlik57180Bb2USbe/
-LWmoq7bsaKWFomksvJ4YlAy3og+0pHxx1WZELkV1VzG90CZ9m7d9dkzzlInR
-HfTofbwt7hr/b8x7QcRV92Vb4035InvjtgfjuWIKydtCv8O9BS3RaXby+OQx
-PnYlD6iqrxt7NM3xNONZjo9P9bIXly8u3rx9mU77RTmnWba0I3+npb8s6EN1
-XZVtlx3Q9d1hdnc8efyZsf/w5CId0Mn48Zfyhry9KftIJPf395P7JxO669G7
-t4+KquBDXD6Sgf355X+k43pHm0DXnNKZy16V9OLi84PILtoSg88XHS38crkm
-Ytroad45nCfz8Xx+M7mp+tv1bFI1GNISrxrTW3lgL19cXf6BVy8d28vi5Isv
-jp9fVTe0aeu25Ct2jw4H89Uku1oRuW9+4TgWRTcu5RVjfvSjPd7Y9AQ8e/7s
-RP98fix/Xrx5ffnnqwFRy3fZ71tibczd/kzL+c6xn6xvspdExt8RBT1AojaH
-VyUd8Tz9+nyS/X6R1++JAVR1+tOf6Kemrst8nX7/cpJ9XS76st56wddtWRbL
-PCXw4y8eIPDvrl6+vvz3wNJpsnzx/oOkt6bTXH0A+c2b+rrk6ZeP5NtOH3L8
-xaO+nN/WxHMW464E/+8eeU7waGmr8Orby4t0sUUifksLuSrnvFfZZdet83pL
-Ph78Pu/KRVWX2dvyb+uqLcHSM2IwdcF/Hn6G1C/OH/2+be5pPbKvm3a93Dnf
-eT675h8xW7ri/PXV9yfpYEUIv6Z30hK2dxUN8u4kO6ArD2lbsxcNiYB6fF7P
-aQjEGN6xLM2+yTf0Xoj3dd/UzbJZd1HSC/PoN58ho+8n9Mo2/2u+yLe2n7hl
-29flJmUnz8aPn+6cI12RE9+avy/bSVX215grKQ+PRG+o9TXEZOSxYyL6uxNe
-jauLy3fvBqtRZ+ft/JbEz5wPNKaIKZO872834PTx2LDyQseVePXVerVabFi6
-0iyyAzz5gd3DNP9Ih6Jq3982i7//M5Pir8YdSdZ+nLvh8qQuzr+9+u6bl9vT
-wtacz0F4F/mqWy/K7Nu2ua4WMk2M+TNDJrXiVXW7tSnP/pnxL6tbGz7UuRzD
-Gs9lWI/29sbjcZbPOn5Ev7dnKlbUrrKiXNEhITlck3bEqmdHsnd+m+WdKV3E
-JkYQ1swzmK7pIwmYPeHs9IH3krRF0rhuugmR+h3JviLrjJnzo3P6f0tykEaR
-FQ29o276bLbJqp7O7TXpRc39Xn+b91muo8huc7nonrj4bbko6Je2JPlWjOjY
-YiR0iKqaOE9Hg+Q5yc8dMeC9oroGP+qzZoZLWxrYu9uqo5fP18wRMmYpLJe7
-8MoxJiJygZazbrq+mu+t2mZeFkbCTvUk3k/aGVYvvgjsCEoNz5iXepJd0pTL
-a2JO3d58kVfLjP4lRnhNPJGvJhU0rxtwyOyuKu9pQYuS1BfS/SoeAe9VfkOc
-HMOm5xT06m60twRzvMuJj96UGbO9u0aeiPvn8mwa/iq/EaW+IE7LulN9XUH2
-8e88Zd6psthLWepbWU1etjKLi0B/FWsmElpTmkI+I6Iv76qCeT9WqITO3t2X
-5WrE+7NY83izOAN+I52D9TUtQMU061aO9pDotu8mQrjLqigW5d7er1ihw4uh
-ru2dO2pSSiBayh1VKxHRymYzptvF9Xhe8i0bGswpkV34CXMXklcCZJIiGml1
-ijRXolL+FlTWXF9D0NCi0ix4Oln5gcUTk6Pya6ZQUnhIS4kvrpK9ISrNl6uS
-lQhQuL5bJwWaoQES/fMa0qLTQlarRcn7SQtMwyA+mjWkKrc0idv8rmpIv8zv
-yMjAjpAOkte2CqfZ0VGjttfRER54f1vxEbdlwhlrSEtKzqkq47TpdG7wB+1v
-SYfSLX444/RGLNfmDPcdHXmC3P1W7FyHmSTn2J7OJznbcZJHWZnTc/ggEOGt
-8wXJC7Ac1o9oKVtRAfhFZLAyP8cl8Ul0Gsu6o3Uh24/ET9WJPfLQaR7JDjER
-NPdkQNAi84yXMG94skb/RLUP8Rhsb3wdNjjYYDS46+oDriIVnW7hnXJn7mAX
-2+AFvZJTnj0d4VbmHqBTZvb+9y/kd14B//Uz+dozBBwhojSmcHfll3IlzhHN
-et5WK3y/LNmbUHVLf/FXcvF5TUyApOG8WSXPej4yysp2cRx/6fHjQ724LfNe
-1me26cvxgg7BIrsue6IDOkVGUTkIuKr/SvfjHFRLOjTLYHTS2aPNG9GRmeek
-p9KVxGdpeG0+qxZ8bhcVUySNQNYlUIcN2CQQC6aqdmfs1x0RicgIWkgihNd0
-RSkCVumOxjcre+KLNUjehC3RC51NO8QsPnUyIJmKpfGM54MzzQpDPiYmCYIj
-PjNbVMLcsyWxdhwQ8EEjdSLnVUPTZP5IG0fHVRY0d+SFF5F5TopZp2MGO3QD
-p4VNBAzRSwmVATS8yLCG/MskbnOWF8sKm1Z1OEHNmo8APU4EQr2hX5gZB4bA
-UyDyJ3OgBL/IizvW9UfgSh8qltR0C5EIbQtt1hx7Hc4snaJmPl+vSBAsGmar
-4DbE6e9y8S3QqEmP4BWWl8hUuobeW5TEscBv2VFydISLax1nkdW8KpgDaV33
-LA/sQDnJTLJ6scjgfAqODOaJRTXHPq5rPis3JZEPDW1RxnljA3SUcnxbmJHG
-cfxwy7ytO2FtNEm2HXSc9BDiYrU+TUasi0nbTVx1sQB/8sJcOTCT8QKGCF1n
-TFpk75KXHge5y/62LjtRb/IZ76VpOKdO7h7I7UZ2dHyDTNSfSC4essqzsjOn
-31/T+uDpeuSDUqG/m3ZXEiH0h5HOjo+zG5xaXm4+WCSmlGplTiylc3Zj4OkT
-1iYumpqFqMyF3vWC1bMKn2WJ2Edyj9ftv/ru6t3+SP6bvX6Dv9++/LfvLt++
-fMF/X/3x/Jtvwh97esXVH998982L+Fe88+LNq1cvX7+Qm+nbLPlqb//V+X/s
-ywrsv/n23eWb1+ff7AtH8pIlF5E7Ux5GWgHrH3m3J9x5Bt04+/3Ft//nfx8/
-zT5+/G/q4/v0ST+wl48+3N+WyhGamg6QfKSV3OzlqxXRGo4hkTXtF5tnrOx3
-0NbrjBUCWs2j/+SV+ctp9pvZfHX89Lf6BU84+dLWLPkSa7b9zdbNsog7vtrx
-mrCayfeDlU7He/4fyWdbd/flb34HkTg+/up3v92jSR+Jm/6UWMW5MjJV4fSw
-7N/zp6LJNs2abJk7UY7F+Pr33+2fwpwRnzataWJe8WeyrzKxr/iTGldghOFc
-dH0jG6BjIXKflQseEVNwFfyOxHgK5l6p8iXbC1kH7YJ21kwLkENr6v+5PDfD
-ps6Ya3339pKISH3Cnz6Nwk+dCF3z+C4qEtAVzYt0K2gPeLNQm92yritiK2Ct
-KnWJny+aDYgcC6oGh5e/NOlveEwdjoGIaTEByg+s+TSkjPcssHJmMDSFeqgI
-GIWq/Kr+zvOSeYbR8c8Vu7VkHMxaFvJWWtqmL2VO2DdMTCylIHCDUWeOZ1qF
-oI/x8i+gFzaitR2RAkvslfRk4dy9vew0DBHCSAd536zJIl7QLJnjBxUk8Fqy
-Xm5kVWk+MBN+3Y1MIgqrNDU2dzYtm2/MXkXzhqECAku1WjVm2RC4WTQzEv9q
-P4fXdxvS5JcTPhw6YNZyStIU65vr9eJz2y07zOyrV9XvvnEXdeB3KvEa2/sg
-HLBxEMmsnOh2sayixZ/R0ybZDzBowjFg/UoMSJZf2R/fvfsWw2Iar3r383Xb
-LG3pYPLQtPH8qM3yVrAMhi7EvoKcRfeShApJ9L4U0d4seCwHQUuanByeMdtl
-Kwvvg80HxVJOE49E5PQke93IYeVH6NLLAaLtEE2SNRl6NZN7VRbYvO/FQ2CM
-wVvbsGk/9Ls5BD1OTa7i1OyEQoSkfMRI7nO+jNRqtqLxHNGO+/AqcZSwDMYZ
-YdWXnQNwkkTqlQXmzb5tuj7o4DhfNswZC6TwrXo+Jtmb+BDi5MxVbNzyUDhK
-6PjbHd2Z/cVzZF0S/hqZkDtFkyR4I6wGe4m5ErexTXwyOcZKe4sHksEOhjoZ
-ZrQ+i1K1MlqWVMlVNYh1VLUXdVKmv7La7jRbmwPMQkdRhxjLDznbRl3Z2753
-JaYZfU0iiyo/xej6iDyh7PC8C14cftYbz3BE2qk+CPrHQ/NusAX8k42XNE8m
-CWy9eInMsKWrpxoamI6yaT7Tv4igpyWNp53GaT49ZNFkW+aJGiJHTypeQL9P
-bTg/5r17yJeyVt8TB7ZlEo6Ck0cyRRxOQh5haPLWU8jsghVxno7uW3j0F/Lo
-t2XXLIiz2OOJN4xNAhf5ilQ3OrOrlfD2h/dGjD+3TnL43GqMIFI2QQ8JW1TD
-xaC+LDHfRGngpbENTSLq2XwzZ2e3mIL3TEhjph43nFamVQQvmFx7YCJe95pG
-BSOyGDmdQtnS16Jt2AhE2tATvU11mk0/vqfrRrIgP1bFaOC+FIv+k9vTZ7Lw
-u1wL4SjgOI7MpTfOi4Im1JWFuh8DZ+IlgjqDT2qHHzjvhKwke0VeRK+IKIUy
-5MHRpwd3JfNr2v96vZwxtyTZnnelutFVBQxqhKOor3Rib96+Hb+4/MPLq3c2
-n0VDh3BODyGd/EPODiS2yeklDeQkKx5/PB+ffPFM1Y6CyQlS7t3X469EXepM
-SyO9LuMIv6h4/BeZCX+6evM6uxhqNFfz21LU1ipRc/IM2gwdULIcioo4rjF0
-r0awAwbfCFeVozbJvocixJfLnWPm+u6EBd2M+DyGdb1o4I0fi94ly6p2Hk7J
-q6YoF2LXcQgbu+v4hbKKfs0i4uhoSMNKe4e01qq2OM5lol8oZZ63baWW6BZH
-8kwnU5kc1GCwFrBLdmHxGaAZsQsWXg+vkc5K2ViRQPCL8eLAI2oc1txg0Z1p
-juCKnQvGgBLvRT5vGxIjJiKzvCe+Nlv3ZZf4k5yrKjtIXEI8msh4DsUfAeN0
-1/s0aNQsFvmqE6ZF42YfKBmwpCVtZBVtFIjxhhM+ecJH4VxXHVrudXkviro4
-1wKvHjft2ASJGjpiiIXjrHGm26BRBsF3BgeM8+BML19ffff115cXly9fv5sm
-jEC9ag8bGuJfc2EQnAd2CtO5ZWL9VSAKp3XwLIOuEtmvkU1ZIQJQr+mcyaRE
-GOlRZmdkNhX9YP90X07ldKTqpvwwVRiOKnjQswqi1xo+aJ7UVG7T6/JMjlmj
-ww/XTrKXTIMsP+mA0BUY5BJqiJhuN2tSezhY0goOIJv+Zz7+++Px878c/O5U
-/xz/5ci+PPzddJcG9nlj7+xze0B3diWrE6qlqukHBUMsPV4BEmhLCScuxGV0
-W60YSsCal9sDMdi2XP5mHElUo2L0jLglJVSGNWdVHpGKPn9fKt4Jj8u6VW6q
-MOJKQDEtnKcgmHBwLyzp/g6gMhacJdyXOCpklzT3h+zF5CViyJmdDjjtjAbN
-H42DREt8urc3JhY4FVjZ9OhIFH8ZW3AA1AyFUiQUSa/VbT4+ASKLRIYCwdgr
-EKQSWV36xNOCyc8+rLtp5KDlh3m5ErzWYpMFdmjXlusp9v++XCzGTNesRWCs
-effQQMGY5UDQVVM6DgsekzBOjbQssbpDZFqePTkZz0hUOFDGFWza7DXEiwhH
-Rr/xTMGByBpelDkE7t9L4qWn/NL6NO+ePf3i8eMpGJYcRdKV2X8vwo8VK8/c
-1x3sqAUbdKl93FlAgg+4DzbDu4RNZS9eNms0WKUGtwRcmZNFEjvLhCeqzyoQ
-hBxUh6ABIWkokoe3LENcMDAmW29mQzTNixg26dgSKkR5tasdGz85hIHdrM39
-WF0PHfqwpVnLVgrNWAO+cbZhqiMPTUZSQeas+dEyLDZK3VfD48J+CjZLVTyY
-vrHrFZjq0P2zw6LWgwpXjko/Bi3IJBKX1hIRH/0hEMKSWSzHaKo79hzYTork
-MsYtrKbIykVX3os3luf3RrkNvOvig7E7bKdgqW3FUoIeJv5gsZjU8eF3JRzn
-qcgHPoE4nJHPsXtTo+fiB1ktmLEp2sNEnzwlg35tYQuBDou1sCrzfqhM0XJF
-zUTlHKmkC3rPkefYRwnX0wvdc0Z2l1n7o4xsgZw1E9IMYoSzr6CjA8djKi6i
-jyNMmTfLsfeHVDVodcFhoQ61loFDrP8KXPQUYSc29pUP1ewXbuqxf77N3R3J
-9MQQ0c3fs3HTNUPXnqgbRPvABOdJWEktHvErzkpVV8IxMGOS/f4swFpR+fL5
-e4QGQ/yb6e81D5k2nzQ7pr4fBkqzZx0IZCntE+Nzyr0+gL2fQS3h8OCs1OMn
-XJyFbNQQRJrU/ju7Sp/R+dOm6hfW8WZNK0GXKFfGONhAEZ7G07pgvHCdP3Co
-hAdnHckTooyyZicKdkyZbsmsKLutbm7H8/ggp2nxMVTnWsLc1zSRRVBQqy5q
-QBGAIvEHNoZvWpFAqT1PjLGrFjA6NfII579qvBZ40+gglMloSfBed24XgFwQ
-NyXoK3hL3JoPT0EYMvBBqqnF8YPIRYetYbxwqPgGoVtxsdDX9lqeGGvtqsMz
-Xy8DBso2lt9v4SZVduX0W7AcEcy7MpVrIxyIqtZlQUQmD8THdtjiPt+ovFIl
-mm2HfGnurHsOybIYw/KYBcouG/hl2M0Bi3Rv72sZvkiGq2BrZt+rHSEQwxGC
-ROJAkgVVD5DoL6RH0MpKcJ5VYZaXNfsYTI0zI4jVoytzZKufUzCnI3FyBRnN
-oYjEhSUq1sw9ZtV0lYJWjDrOJbz9vib2oGZAGHbQh9n5pbeO8cA5zN6CfVIS
-M2IdxSLimxXpKPwlPPKGlSDZ9/Tx0yjHvOMweAsF3jA9IaWLNqmhQzxrio0f
-N1BLC2wS6ZKsfWgwcfcj2e9OBGpoHV5sNjCC+CGh0yPOzFg3sqs+7nfrOQ23
-2z8l/ZuE86cpD8F8uPBkqmLamcXB9LHPtIjx7OvCi9OT150DAgL30l1n8FJd
-605pLGcETwNdMMKRslW2F+b9mljkuoYZhDPLCwPrJ0T5NdYFNVB3UA/JMl9F
-IoE2m5JmW/brFvaF+WqFzrwYNjAijAhiO3GtLRqlOhyQSgGngAhe+tRgAX/A
-oqubOdzKrIi0gY2CPoeSlsEeCfiCX6+HQJaBvQJC3mURuO+Qr8H7ItIdo8I1
-suiMeMN+3Vddqd5RJClVAHHm7GWclbyRAKYwlWSG0bNArHgF3sh+7+29xEMU
-CqaeJlrGoyOlCFYfODwA2wJnCTtO2pr8McUXJZuOpW5JGZE3RWmc4Syb6hPD
-HbdkA6i0ZH7D3n4a3CUTBZM+mRpNJzxZd8kM1bghsk+d25nzSK05+8UV/kfn
-c1237M8CiXI0aKQgy0U1r1hrvF53+cIOOg63wutYeVGGTk8ooKFF35VgChW7
-kkSjDVpsz4FXSpjWkuzYzqB5ARDF+u0Kc4fqpEPqYrAjxtAsGCaRYnAeUQfd
-/boQ7E1Q92dHxpxZqs69MCKdqy2Jv/8kftLsp+yV2gY/0XeMmdV/6dNUHzul
-7+pA2UnsNS8Aa8DVbtX5DkmpY5+VHg5chJmWBS6I5COCMzlA+sjAa/gO+aks
-zgTIxxu3vWd6Y4QXb9+ZqKM+sBGHSuwpxmuYLhMfIOKEAACGY8J7AryVkP4g
-WE6WfRfgnHMiShJphvWYZL9nOlP3GILRFvpqzE1k+7mN41HbXCVG03Zn4PVi
-lVWKehbmI/wfDAgvW4lJpWH+jIHBtNjjF6+veMYcN6YVuK4+ALPDYzGoGIdU
-XGDh+ERiaRb7wxvA24RNQ657bSMkTyG7LuGKbQmnajhQwMwTs9qojqRx0vC0
-cGNOR2tu6DO1xEv2HoeTx1p3YGXI7oQHp1B07cQ4JYK6Lal3tYEHi+xe4+us
-7laLHiZdwIiDBNtyyRqhWqg4xw7/KehJBlZBC8dFNJU37LRIhCWvFXPYTVTd
-OJYjQqJid6mYZt3aonV5XAwlNnvYrzkDg44gCQ015jMndMX7aqkU7xFRf5Cc
-oYuyds+hToa/WT7IMKoZBGuiFx4dsdCHHhLClcS2EJEx/3Fjvjal+Eb80jxm
-NSmCb059sT2x8xUrA8aOaJNPheRccgE9B3LRIkDR+PDxBJrg1xIfEpVPB5G4
-jBm5plpXUCBjSCv6BQU2OBO0O2jQ7GBehZHLFUjghl3igOJ9UvISiArsnoBo
-Se+KMspuYxahRgQH5Bhp5TFXEcKty99tSI38MJ6xuzV4tjUwQ+KO+NcduBAt
-LI1ifttUbsDBX45zoSPkOGvTQqdJ/ekGZr9teKHD0OkkqF8rKDSyXwXpzO1N
-gn9W/qlTnTCvGmPHiiTKF3MOtrYKHI3duV1UNTxfDdYoTsLUwqnjZGkePZ4c
-T2EsISos0UyePysdoB3vw2avTclS+9YMPLgB8AXLE40ix+Bd3MvZBmEenHwa
-diFMRL0tgtXiJQ9B34kOiYwnaIoihhVWp+NktRY8qzhz1gGuxE8CyeEnEbst
-l6t+I0M1rXP6SG2louEkmhvNmIT8wmMBrA/EF4zCycnkKT/1W1oYDnCHMDMd
-LSITfQaxN104ecnKXw0Pd5CSc86Jn0ONPNh63cnkyaGocSVu5G14u+POlhPs
-a/O3Maea/veTr6cw28PXtPyLqmAjSBgI1qMr2YPRN0r6eM8v3Z+/rVkl904Z
-zk7ATvEf7LTgQ7dk+PFcnOniXID53lY3NGRJajGABGJTYK+t7AP/zQNclpin
-DEksE8yMQ7C5+HZwAiK4W+02lkgZknts1NdtfiOHJJCQ9+pA8VtWfR9xAslQ
-BafQ2POF3G/WVXebLhK0XEVW4N1/pFMVtaSwZML9qzY7HwtW8GC1rje8YYeI
-YJqKzsCrBS8HE6wbusRIWbhYxoTsLiB8bmsC/n6S/WFdikSRhEPwTsf6g1Rl
-JeamZnQoR9xIOSvFjo2BGKISkswlMoxoJIYuFM5nVprh+GlvGPuXW9KZ6Egk
-5l9cvmCFRKDxiT4BPrhqVusFBGUvcRIJEJrSeL1GBpS424uYnCWS0OLcMyh9
-tqFr1qyGKKMzydTcbOvUa3WhRQmsoj04+aMix1zZS3Eakm5P4ySEkwoh0yI4
-BMONrOQdAHLZEHEAXshXsj1/GHSaFySCyBqtV+v+NCITu90oHs3JfGeGaUBg
-INEqTby0w8j8Irt89Ab/DYHK7jCqvnzdXekQ1EE8CTxRVpqlxAYrGCCJXcV/
-5nXJIUa7XQx/cweQ5U+nEY4V+2oa1oynAKDEjR5oZ/XUTN5iuTiTVEI2s93X
-iBAxPDNi1B007LBM6kXTNT5L3TKaviIRCvahCkBhkr0ATIvhXDq8HzkCo3rd
-j0zOn6bQzxo4XBbAIDNYyiHbdVmg5tGeG/mIMxX4l6iPOg+3pmnpe1WFYxMf
-OVUgLfU+q85Ip1B0wS00G2fUB5OAI5cuvHl0NG9uafQWitb14Ni8uYe3gRw0
-o2OX8RUXrwvO7Xh2Bilp4gGXKYfcDeRqDCfksaQh9HhtASF5gmCmFQQEfmX4
-TQvVTLKrtYcHOwUeaC3xcckiTPZOSKJcu4vttaIu8ooMR+nnswVGEmwN0Gtz
-WAVJcqFi1h2o+gn4aJy2X1kXChfRzy5hWt9S4Cu30KBsi4JRgMADG2OF2DgS
-ytt78i+fJ3tqPjvPh2dGt6bUwk8fJ3ZIIB239wNg1VMmc6wCnYROlS9mb4UT
-PkkQLxxUmZ3iyB/eL4um0vWMhw1A5odGiDWuGzG8dDpxLTwjL3n+LCn5vK1r
-PaC6qc7VLsRaLkitUVROtZwYow3MleY1ZV/JVI03XdbIZkZZgzAGkEP8jhEY
-8rJpVVGAk8LsAdkbS7w5OtLd16WL+EJ1QuIgOc6J146UjD5NDcUln6dsl3cp
-v0RyiaGUiHPKjz961J5jngZTSKHzyUwCIrK6HoCMAyls1OT7LPXXm0wnU8qC
-T3cMLcq4AAJMsc1+bYxT/5I1MnLbWiRRjk2wdhgcSyPzl7NHQ525MUrP+Q8h
-zdKB8AU86MnbuySgGJrq631l+bqo2Og/F3jOw4fIObAke+OBNXTcZsAqVL4o
-cChhHA6i8/CpdIm7igQUd0wX0uXZk6ZWgoNVhhycesAVNCVqFxu3AgW6M0dH
-bQlEiaZi3+fMnkz0BqrcsfrRpRiYgi8B4CfOumiZF5+Da/hhOXe4JTvLIBNj
-klO2BssmxNM5mhLgjVcZcl77m7BNLCdmRjccqTz/w9uXL6cxsd0iVvfm22Tj
-2OVLacYxniVa9wi+MQSRnaHDi3vb1M06uMA8aCRkFf8qe+MwUO8qdaNcOKj+
-3t6ViogYBFyvCmgPOVlg89uW39MtGMJJy3RDauYSWVMw2lwmlq8VweIIFD7j
-sCmfVTq+zf0kk2CZqP4SOWcntCjRPhWEQyQdl+IYOPy34NtEHKULwBmbxhvO
-TNsTn52+K9aniG/p0uwBHabxHD/QbOoTHTQSZ4H9bt1JxRHEhumqLqlYYYHp
-1EGKO/WheufwInCzthwHIcDKs8GsYU2mq8e2UFloPuHWKLgkixkXKZTx152k
-cdysmWseHdHkFpLDJvt3dGS6viyM1cFicKGrVZF372M004ltGz17PnQ/j+CU
-9XM9QpZS7SQeieUFK+UkB5JiHRENlFtSXgSNGQhvVabxFcTo/kx/ZD+F4e+K
-0UWT7qdgu5FxxDBZbx5N5eqdPD58zzeBNdvVzFd/vKuaxcNX0h8mvn5UQBPf
-q1gQZ1H9FO8AliOo/zzjRO+IoF7lsXhgcFG+l0Xh34mmaDGnksTDL947OnoT
-DQ9w7M9FDEKmHvFiDZwquxCcU/DGJ0SusWYdJym5YqBJtFcg1SmLbqUsBCS6
-hjejI6PjSBkyMtmnuQAgIBRpEtWq5cMvaDp2RsfT64pLIPYKqHI8okqJlssW
-Dkk+Y2J04ur46UhC+GDdp7pBEl4Ozqx8Pl8vxY8kGgMTf0jZFUsdHmouMKTb
-t0bBI074b/vxAjZAdNzsDHcX1YIUjELThgMJiB8r7iALT9YC7oI0DqeNeZAq
-7glWWPQzl3DdSYatbm0SiajqBPWnQUAVy44yBS/FgLMuJRJOpWXuAlkAHwYC
-l0K8aaghLDDHeGWiXD5CCGpA4kyo8Anf5quADjAWwuuBDSDlzLJSqwB7pKO5
-lnxD5kBJaS2n4JaSUyayTOq4yZj5Kci4aoAmptdweQHYQhyqCbCMvb2B4LGz
-nNRM6WFjRQJ8Pnlqws8fU3X/gJfz5l0FEv4BfJ5dty4BXOSfCYYE1DaUECPL
-IxEh1ZWcnNyNfIJbmcjW4KEQaVaFwgKdK0iginiF7Bwc3Z0VilIZLp5zM5GD
-dewKr8VABfyKATgW6u3dl6s+O3j37hsUJq7nkjdFm6o+xghP43SB8IqOw1Nd
-r49bjlilB0+SNZJjGxI/ol5MvGaRjA8azjKv1+w3XrdllwUmFH2actiBXUXZ
-wEW+mXAUyBwMpIexwr3Kq1YHYM6DRTUr1c8CCmkbBgxrVrmueUA0mV0yDVv+
-ozztR04XAao5OJ1JVcG6C+TVaQYYa1CPORbTAdLlSUoXqRd/yybxZpsfoUsf
-m7iHkagS9iK8zOl6dnT0TbG0gbCGXbR1Ji5mzfuZL5r5+0xTJNcL5qusVAOm
-0RlVCFLDSxXvhl42ddU3UN8N9ggPcJQyyeWulJke2UFy696gTKBmi3SIM4VM
-RJd9vIwFQcC7xVN9cHQURE90rQly7nBYqtEwpETFVpplZ3ZtH3OiUpcdwgwO
-U+AxiVERJZXtv/7rv/Y+7mXZPkNpaHr7p9n+sOgZR433R3yRhlb4Ii2sfPr3
-Z6/eTyYT/b38G/32Jf7WLF/6/DHb/43WBYC+xCmKAc/zW37Yb/jjb/dHGT0p
-+4TbQ1SNfv9PuoIMMrvgL/Iuq8SHBzAO4NnTTMsqS22LP11cIbeJcdaYvgiL
-7rf7e58w8b23ZOFyDtjxJKRJS3E/MEcp7xeiNLzCLOcstkpEPdUFmWYHWiXx
-jCSfrMwUGrKkJXFZmwCmEjL6+FFKVn/6dMgRkyTo5AvOpT6MCMuU/VYA0zXN
-sZPsBLZ5kecxBuIGqfMJWfCx5+txtQd3AjEPXkETb6uCroZFM4CnuMHB6310
-dLVmBVNSHAWzVP5NAtF8GJteUAxQUuaMIBfp1Jc3bHqcI80Q1QwVqIxUpfCO
-Lj1MuuCjrXXSmpIlUg5YRsgoxOTnsYgLtgei2YUgrGBHnj5NbL/0EcBGyBnC
-wUPenL8r2RMAaheM8HOhyl1zMUsfHEuWksmLfQGcZn4m2leUiJKpYjk2znUL
-tUekyI9uWNMH/YnszCcdD/zJW1iWH/Zzu+KLBGD9xWssywZsQXCL8lkUqRTx
-Vp+dhtQ/SOw+5ZJ85Ryiik8j69Et25SlJASHfG3EVwPiUC0CXYjtkqGIAhwd
-vUD5X8m/nmixAb/DcRekBIyUf2KRCCmw00Y0ZWskAauugYNcznQxknSR4Css
-Ao7tvtbgvNguA6zDAVurcASXfwsVFX6UAgKjCEnQbz5ND6FJCNka6hqIixVX
-yDX3iZspystGK4cd4qYJBbT2F7xk34NLjpmdCD7InLtcq5Kt2iqHV5eHGBHm
-8LP49wlZwNhwoLLIYHmv+8aHWwN6OwUzx2LL/DBwuYEfWBxaCYrzs2H6mB/C
-8n0rLg/tBb44zaaPvPZQU4xUXENrdrohT5OVKxSUFPkxdpx2pSW2aXe4Ohqp
-IaxgQHBwE4ZPn+iULLrmz4xWPe80N1HraUxjcmN3toVnA/fVks4tp222W5VO
-u+ygnNxMRlL9+2tGkh8inq+Rf9Cjzst0wmVQoryfG4ULYr3LOyah6FgQTsJi
-IQDtAC5ufOmFdXv6cCHQbqR5lbSKVX3d5lYEl2zGv5La0HE1A/m5bcAEmf3/
-fDXQ6J7+xcVADbkjtV1i8OCBy8H5iXHinBABDNXACAfcpRDuLLU028RoZKjL
-FTzuEgm2aZFGGqoxcfqGMQi+Nfqk7GotHx10enUmwl9gL7rlFASVeaEu4wTl
-q5PIRxgQ0jm45sdRKAQXALeTbD/AGKdWE4rmZ7m4+7ATOPtzKwFXEkjxfNH8
-NPFWSnAgItDR419+p7oSW4jzksn63/djSihKxkKySAqF+BzU8aRRcoGtF00A
-zOZAfruas/KAgkukamk4wCeMuZiPhq4Q1W4Dd4UAl1iPqXoIJueMiKVll8uq
-F1Q9P5/pc8YlJzYjdbNoUXTiy8Ej8XvQyW7FX07kGL6oX670Y1JQwl1ESGd6
-a6CRDOVSSfV2dsJvVAn8rXzHl0HbR1sAMhrgfcWDo2uWbYB9DRKJ+xYX4K/f
-7mef6N5/nXnwDyiyWUgjC4cBF4lrjQU/iBvZPCR+12qxyak9Iw5adrdW065z
-+jQInodhfrJtU1kNUogfALjgCZQnIxnKRKiDCPuB/rpL4W+0waMYww/2vihT
-cPRFN9hXp6Eo7natbPbHdn0Xr5BjJHHSUBN4GBSNN4WVDPdBK7LaIFpDxg0d
-wMgEnxeyM5Q9ap0J7LmVjGHUGu8kxzUnO2zBUBR/aAjGlRWTsIM9NAXpK4JC
-k2n0MARFQKJO3GjCPGijh+q7xGIbKcidndTARY8Uab0CGoNljsFGGe37c7n3
-ad+KEr7Wqrs1EBUMKloX5qmyXqlGJlaVFHYIxFxFJWwUW16M4tN9YUjL/anm
-KJbj2cdE2sooZ9Wl00GFIpsoC6Omrg46uHSyS65xA0XNw4ZDEZhVuVjAD5RW
-F9UE53momZzlcy2wr0ak2MgmXWBHSWBzmrAm8A5XzODA1U883AaTcsyajYok
-+c+qGEoZHV7bfM54zM47cYXILeB0RiRDCxCtvVKyuZ3ymXHPBTZ5dNgaRNPq
-R8kUUNDIqk0372ndSHNcLvPW8wEuCJn9UC0KzvWXoc1RRg+OiWjy/VVK3ukm
-yuO0uEQFxVm7HimxyVSl+l+H0jEai2OnJPHHOy35pJa4RPVEfvlK/UollggA
-5bPv2TLo1u11ztbfF6g1GtZBIUv9fcVk9EZqMyALSMSUBzc4RkV0DudEfm2g
-C/Yv+9ooivmY7D2baLiSlthcwXTIl5qCo2XVcnEqGJ2kYeQlKU7L9VL0K0l4
-CI9kQCkmHssHYVdiTdrTVFrtyHIXdLmzqFi5MSO8G4iI1RpHWyBQWp4hAAzy
-5YzGzIhfO3v7yUP3Mbb4XbBXoEHsD3sEJPeaTa4DwOHBWggZeM+nwkLE0SXi
-41zARio9HgDoQGE7SCBXh9EBIuGV62sP45Z3q+yM2EWrPGaIIlETj45gdRBH
-DuiXPuT47ECyuvoR4psawBsx5sYyXhWpNTjWw6YAjQDeUH6v46IPwdeoqm8o
-0mKWAdRpixT+YPV8dclGIfDAugieZJHqzxaO02C2vZwjddE9+3nQXAJmeiI+
-C2lvUMSI/7CGXcjUFNHG6p7ArziQAMZXQKi/uy0T7NP2ywyfhdQnibU6b1CT
-dC95NjlR6qutJNMo4/4Z57OuWayFGDn4mmCPrFlDNB4gaoMPw7o1IOtUfVfb
-4L6IVbA6fz6s/tgSSNg3FfYwViipm7Q3A2NSy0KSaV3hHbOm75WDBKJBVNoU
-i9D3is5LXhURM1Y0ZxHlUrt9dM4Z3l9IB4GnhHp+cL4Sn/zrurhxhRev112Q
-h+EnVt4bi12qN0BToLhOHY+HC5zELk8+disu4lVD7MNannTCincRtvVRCVHZ
-OCndI2OXQoXBI+fMPkeTKDIkSrHDRbJK2eRzZeMKKatYbVgxJMkDGYhKHccm
-/ZhuZC1PGFffFLnq1wNIjXPm+CYeCeJSm3kMNXtaziNu5lQB9HZk72eSRDUF
-Oj9VbaFKyeQRLhyrUkQ+NDKXLu02T7b8cFvNql7zi9k/p3wvThqBa/bKhxdr
-/WcUuBY/scyT/ZP9FlEL3trwu0Ok0T+P3U3RSKNwWEZ+939UM/3TNABNehJz
-DSe3mmrPy9FoSUFxxW6PnxkF5rA9A7WNtFNYVNaDIdDZNlqwuABNxuU8khTi
-oy1AYdUrZTDD6SYJikL7e3U/R8baDmBAyZ8n5LPoSRYPI65Rqa5B6WYF1YfR
-MK31kDPwTFIJ9o7diMt49PrhHkhbC1rx+3CQHKkNVEL1HyWIZmZAoIBWAm8b
-PQra+Od6sdaSVpLFp8WfxNEOv5TDMzDfJMujU+Fh/WsSmKeAmKUahVJ+KK4V
-dHQUFzeJWBAhvzTKgI3JE1THgTgfQnycURl9LYgV0uKIBOE6sNGrUhMWSDqx
-7EpthmANXQ1kYaMYf3p4pjXDcs+eb8U/OUpEJCgfD+cg02SAxom6JYqb8eJb
-m4Wqj0gBIxw98Vxs3fB8CkzX2f6I9MdpdKz2qURO69gBCA9hFmFbSWu10MLZ
-/ITObA7Gjob095MhcAyefWJcZCqE2xF9L7yZFLK0zEvH8onfrVEk3OqqcZuQ
-Srg8cWNWgNerptbHhCEgeB/eNzYUGGL+0eU2eKnWvtJ8FGhpYFz2q1VETLKV
-SvTM5gC9uDR/NLMoBTIBbDiLG+JKzPIzS7L/F0hDsp0f1pW1woCn4uplMxQH
-jbFmllooTNORT7wkKrkjrjgEA1FcMtIZo6qD04thOKxeTHkPYz0wt5E/VxRl
-qx0ogMxsctqOdAaGbDdqWEj+thpAvnqmViKyMjCqNWlgTevBeCZjBhsUxkni
-p0sviAnIfqaC+PHHJ1FJjbvIFqD0iQKLg7arcRRXtmUREItbonCSXXBYweyC
-QAcqY+f+R7zTiiIH4CpalXW9Z8GpmgkqG2k1HCizoZUlcs4sr2GoBK44UFGU
-W5j9XT1/fLlH35ZFosCWd29tZ7nPmjry4qhDQG8XdOtBZVeVpJ1QwqhLH2hJ
-eXUoHmYMpBuRNczHMOBk1Urh+FBI+pi+uPz+5ds/cE1y6ZWRlClPFTcsBHtE
-lZcL9BndMT34VZcJZXSk+ylvMpl1eX2m7m9DUxtmMi3xp45rhc3RkVWY9Dyg
-12YicnYFXpLhPno8ebKvEKqbffSKf3F1Lt/Iu3+siod4cSNojGVVrzG+Tgo5
-SJGR3w4DOh/pHdpnAg+sJL5S6EcN91hlG46v4AEuJQLXoYjFkyfPs+/eXYyy
-/5Wh1e2HKEUGqMat0I/uMT8LW7yf/ZTthz3GJ7/D8lzJQPHxIlEpMCK4h32s
-KH4bZzPSLtX7UkGIL1G2gVdKyjj+RMp3vJ7DUYpr06AUglRgmfHpIti4FBl9
-DvdqfSLcQSw4djSdHCfxK8Mo+gmy0rJ14/EJ5rm9j/ZGD+gEvM9wk5hagEXG
-G8wgoYv7FiXXUN1m8HtilrgtDSvgrmftKGgAn9wsE/HspxqDij4igJn+TDxS
-dnQQYNTw4gOKjCeFMJI0AmkAxc/FHrO/+PijaOcPQyX/tfDFaeAMWwrTDi6h
-LEy4hL9VICQ2tOl2jIKvhXfIx9IngywpwQsFriBlnOivT5+YQ0TAsOks0/81
-VZ4hETTie75LQ4xP0Q8cfrldjjLx5zCn/tObq5ePLugfX2dga+ABtuKeEoOb
-QBdtVqXqA7J3U4fl1AjfdtDF1lIRgxj6VmLo56Nw8S1dTLthpc9GpRaEH/l9
-HsrzYmasOZxZ5KryWqzrmGtBpRFKZOUDHQzFCGUC8ErT2Wfn3lH0y93kAtui
-sXHdZRbOQLkkavFNJWFLg+Yb3B1P6BkBpx3d6mQ+MX0p7LaZnElbP/HF8soM
-QZ1nOnhdxMHc/RhRRU8WyqiNHhYKKIMqplsyeeqQZoKS0fy5TJmgj+MAQSQH
-Vg4VhDjeo63qrAmpj2loHqVarNJfF5Q0Cf3gxcsh6R9u/RDfq8v7SMlWaDG1
-jOIRsQJMaq3X1l1dXfBwjHrIIaKcP4+SDodHe8F7tch8HnyFlnnqN6ZIMQtE
-8Xm3zFplrBKfFtRiDf9zbUyjC4Tr6mIMtU6qeOYtQGLWXEqhbHl2dXH57l32
-zl9zpdd8/IgfP306dK3b0WPKdYkbdrfBoaznGgOvtNooIiZYFvVHInXJepwz
-Tw+FfxbNjRAzl6Gi89YhKsttpCQXDSjateqxLqFeoAIq31B70Jp7aMW/s2Gb
-qGF2oWt3W292tp5CVHQqepZKlVDyWYrgjLX2ogUsD3ZXJx65dk8h5/8QMVBX
-hdMM8YcMB+kRI0QajGmpyxlwuYAOD+SZ/iYpXD7wATBO8FZM9r4U+rafQ8lE
-C4f4EnyhgbAvfOTv3u6eVF3Hu6pEDmudju4faeo0yd70Vm25H7w3mkfDl05N
-rZyKMVuPESuV+ah9Fcs48/a40FkeolXSqmELH/t88vTQpV9KgVPteMZrqCbl
-Vzv0haHH+MEU9NASVyrL/5IU9LPUM6ixBWnJSWyglmrMVVNkqFZX1vArhKAq
-JxBKwXOjJGSZiW9GH5NGmUOHapn8oOjM8VMi/eeTLd8U6A1xe5l04lYLfNOT
-bNpZ2Ao+oeQ6IuDAm0cqBwKVOwvsv24stiIpIhp/x2gHBn3imWk1st3t76o0
-baDHVK3YVTWP8459tb6Y0h6NayaZRcnVM1BfX1x6rmBA6gccPaTqhpC84IdG
-niX4B3FI/GElzZ0C1VkHXQ2j1iHebayui9gFuQBZWFtLU7zKXxaqCUmyBLbd
-3oQSquyMG2YFhqh0rM7rdC7ZPEO4q0Opkg5myG/AClq5PPczStxaBWiM5ywG
-zAPSJBeQSQaB2m1tf2QHigvmwXpAl5b2QxRj2O5LQfEpPjE2bM7vmgrBZw+m
-jXsl5utUovNjy1clJWQB8EDw7jFhqfq+jd2LXn6XzuHTg/RaZgbTHZbxdLJ3
-/HjiCWh4Xps6zdwdWRXUSkpnTmF9T892P94fCeQTKCHJ4MAB3LtZOsiieM4h
-rUgi13+tbfZUfx0WPoO+QDrhKkOJ7Zb0Bs+6gQuMYt1QbVK6KuLCd+IAXEwY
-ZW5ADVsFO2KEVBhOGkuqrJjoXdVZZld0oAb9x/TcW1cTADiy4GJWgp2V2Ig2
-5zZDtJvH28YlnIXZNOyJR4oqgE+PpF7yy4B8yYtkQZGxYUEpxhEXVrcZzFsm
-bdOUF2ybMsdTS4lNvz+ZuoYKOw0gEYqoN20TgQqsjTe4flhCbNKUoDMaDtgT
-f4NYnJ2ZSHA5v7Vq0dk3yIG6RDvtXmL/HUfAX1QdIOUbLusCfPj0o2ULMHy5
-+EQM3ZoRdxygmW3GVSHtVQxCHMuOHkz/8PJd9pGNkE+P8lX1CP607tFHftBI
-iyDXvD1saR+ySkEa2vi2WSGM98E9yaqg58JnGvRpm360d/64bhntGOywTyK7
-auGAjn2fSTZbp/QsIp1fKPrERupGD9uPIAgd2rwwGlbOMkbahUKYWlyCXQ/T
-WOTU6q6qwsjRZZ/7ZLJ0LDdIzNtKs/oKr66eqXJwOxEIpBJXKVDFyRwfCnL2
-lVsrVzcYtVsrKbFhpWXcttMTdBEFZ04jNUfaNrA99D7UDN7ge0GFUhihgJQe
-iGzQ2sjacZLB+OGGpJG4mPh4qUek/7ncnDw+eTwl6/Lli6vLP/AHztuSsDn9
-+sreKmFiFCC0mlWxfPthQspxCDHrWDgN2dtzjkiK4UmmZn84ksvvyxldbjl5
-wTqT1OSxSnmGy1h4cKEAuzPtQORpx/judzXjMDpStm101uObOZelPccE26Au
-wklh4FYepvgvppiUQ+wwK7CSSH+GfsIvfsn5dtYiYG9Pfnigf8ipKzg02o0g
-HG0HAEe70mhHO5NSoxsHeat8ZIaFhCBVtNCyxryHwwyQD0kmBAtP88UP+h3R
-25gfJdvM/+E1PNQWHQfreizR37I4lAH+f+/aIV6oymTaP9S446GuHNaSQ/p4
-/D835PgVCrXxA1BO9/zh0v8ml1V7HsUEbmEI9IbVupPWEB+kKNbYjFUyeLVc
-pzhrTK9QhSA2NIgdYfkyNeS7FJfpyt+culikCoG6cTUtBF1rxrzJEuV64xky
-KMfaDVXvd0W5sEXWdM51oz5zeG+QtlKM1L+M6ONfC7bmbEswAQNh7iEED9BM
-SjyP+noWeSGg2jXXfUa8x7OeswCRTpVC13JRdEGb2E7IcM7t7PKfLzhpiN+0
-onBgnkm1WcM/WlWnMy3F+UDRx5EtWQCf7EQrh3br/2SFRy3peJak6nMWrhgM
-n6/KfSauBFdEyHSOQdDDOdxCfEjdYXpAaH7MFcf5Td2g0rj4ntH7lxOf8A6w
-SM2Y1vsSp2OfpGuxazb0wig/lO3cXGGsl2iHrkX1Xosdz3zXjyJztbNQuO6C
-Bf9PJFokNLqjcB2vYHDIjeSj0vdPA1cfatr4QncP3B46+A0e5vx3YtGGR4mg
-T89V9K3aewxg2qOGgxSqHbliDCAc1HYXP8UDdfbOErLHYWAa303/juh4GIa7
-HHknvZ0yy+D9/Ot3noizQQHlIcEjXMGikQcRQMAhP9zhh/X0xFVxTMTK+KkH
-YNDUhVMkEJpRSP1ZcL5KgknqgZXigg/DQb3pjLZlO7SRBBEjj0KSBj/b1dzw
-e7yVjSkOpZ92KjHyoNDHIj5F/Ma19IeRPEPfomXk+qyMkr4qI9/wZDXonALQ
-TmjK8ZOIr8EiPzQiTY/TGjzbPVXUVpOx0mukY4lAU3/a/Zqmdm5C0+aSmjeI
-2oyDFiFPEepIrgulYuBRQRsYrbmGzIn0tcFLmLieNJMgnjLNdBTPh6VR9GFn
-EKFC5ZOQ96lNX6xjnQEQQ/adP5+pHPWVUEURkAYidljcfUFyqT12lhYO07IC
-Xfqy0OpJX6obKpULb5Ey8pPilayeZNA69EUVnrmXyFRO/9Q2QFYd4UE8XCxe
-aDf1pv6RaWW5tkntP62jNEqKJQdRqNXblGVwPMEVXDeTXMV4xP+xox0TmkuZ
-danPZom+luHrhvHghI54Rkd+OsMgpamC2kJY8tUswunyJrV2QVQ2dE4BzmCt
-WgJSfkcelE9C0OLnO4fNRZbbzs+w0/LKsajzw4WY70P6i3BjLeSMBIYuv9Zi
-zhVpG7tuhwlA414jlZfry9FetNG3dBmA2XNkUqXxyBwVq94HYpZOOVz9yFLe
-bn2PcnYZ4w6OekwyKwptfTI4W2WlWMHrUnyaIStzpDWNtBQUa0JMM3dSScWV
-FvRY8hT8ONJk3HoQA8B5XLKHNFhSihCORGqORi2uaT2JUT+diwxxGgBNAXyN
-lPbN+L6sbm6RrwsjbiWGQxWCQC5DId7FqTEWnAt1riSTNrwTRyOwglBARW0/
-Lg2TsR8EuZMxvkM3zLmZaSbWY9gRJODuoa+WxAqHxa8uoNnsaNMgJTVEDa9L
-4lTt+7E01SIWwZktlw5x24sdagC2TWSXUkWCIxhSiEB0jpC7FpoLWIkE5nUQ
-x4LQCJBSp8WeGYhHpxSAHSEJY/QwTgJ4s5CiJ2V5DgDbevb82cmnTyPBcD0/
-tg8Xb15f/vkKWIkkLYNNnsmDgGE+KkRt93lbjLGofWX5DgKYWTRkwB48kDii
-1HiIrbtiLjZG6vhW3DgpQ2WYHKjYSdQ5IpFDeJmhUQitCZOU8K/UR14x8lqk
-/D3t2ljKbyBMbcdEa6KzmPbmFGIwCH0Amc599JJC8TEy/OWh9BWXyLkgDhCS
-zocFkbXAppUjl+EaTiRE0dgwXixCCwqugip9niyJXI/9pYpF1MmNiK3QKx5m
-GheYdTlhyPTIJVk/tHC7hvDWQ/vrQErePBfMt4AHjYydwMqBh4/o/kq7HGPT
-f0BJAfafzJqmZzT7yvLc1GeUnr1Y6ew6FiGhJ0otlnuJlLHPAX/CMVPW/BzJ
-yzTHNuS7lUKricSrPvEIcF9efRNxgDjIUIGripXjNEHXWd7aEjIQNXz13C1y
-k9Cx1UUJQACUtdVaTO4EaK+/cBkYij4QQAjaPm1GqW9j2cDee4S+5qZrMKaJ
-9xR9Bjom9EorT4aEPcmjZ7cCEVWvXqK4qzjWXI0RlZzbXELY4EoJq3fV7zJL
-5bGkxVFcKC/hdOidMK4gzsI2JnlkUZ6pjtQF9WFJ5kj0sBq+Qk6zdI0olySJ
-uJMouy9C61LlQWl9cmxXrZUl2BV+z4+wysfDowuJDPNW8vWv8y5ULvaa9GR3
-odtBSouFk62HgU0Clc3BgITmA9obnrbYj3tdh19G/0jxc+15IoV2LZ2lswTR
-SkqchdMpydKydkPzVCsRotUiWbQ96rTximpDRa4DLmXdtAJTrEFEO+cqJo3S
-coqFq+g4UlQeihUebpfFC3yoe1+tInpErtdwV9I0o2tQEPW6rLsY4pJKh2ES
-TumB7YhGsW5Z43JoPNerxCifXifJ50nO3oDAmbuwqIsdCzah95Q4fqyMg7W+
-DJe5BOqql27vCNX8HUmU4ePFuTw71GEVm0JzEzvpcd6VvdWLWZQ4+LBe0mxw
-tpuVj448DCApVkdq27BSReWJH4lLhgUkOrY2KvNNGhSg84FIgpYbrTdnajrE
-m5F6fr2FSpAia9oaNNbLc4QAxaAr0ZAu5A9GSNwX7NHuWNGZZG+0FhAiV2k5
-IJc7plRuhHU6QDA0knv4oUrANsxPUGoIgFqmMnNKzDZePljdLTQCiE+KOjo0
-EH9/N4DxJiCdYRyLdmVWFVb2Cqg5YrQtmwUpBJvD9zTLG4Nh77ABtCP77uZB
-yPMW/CWsPmf03JXa77aTcjpAklU5Sr6EdhutR6TpjojANZyP1ojVMO9mSzZl
-B7SyagRow9gRBzVwPXNDcT2h84EU5oIMPRSBi45HW49kmg9eS+28AY/UQPEf
-Zo9uOxhMAkTTl82yvNuiQhPwUs/T52oueLzShfWUCeRmTSRY92WK8jqi6RwZ
-6aVvk2YUppDkZq6zDHNLHzBgrsSslGWMWQFtudtKlE6nUqefN2B3md9t0PlQ
-A9Xnif06OG9S9lmiOQljYHAdCa01H+5NSidqaLRqUgerzJCudRlwUIVmjT9g
-jnKGCDfoNhOA9RzoX9JcnSnk9CEbD+YU22aJZYdT8C3njMyV4qP6y6qdId/S
-Ffu1VI1tS8XeiUhiEke9I6zJWaA6eY4APcPFttzpVhI3KMRtyXFvGBRhPE5H
-FB+NnqlVqJZpiBM1BXOEp62+3BkRNwcf2jKxUuH+uTx/fb7l+kkzpFlZxXS5
-GS5fns9FKPvSOmOEumPpTd7iG1ZLQ5g/ZmkPqsr5AO/J2YCRWsVXsAhJmJHM
-wSQw/HRyrCFmdZX7rvGWMSxVhD/XEt4/8gtrCy7vD7EaaaPb1VOzRqu6Yj7n
-C9wFj4lUqxvFquzaf3SFSg43FaulToV7wtMQTMn1uhf2ZUC28/9wdifxCOxE
-AHCxbXu9boU9ao080l811wg0XZcivG9aUrtpEYFu+3l4g8PRQikdKqwR7acg
-HdBZuvWffweQqzumaxku7PkriyqXfB5DHuxu0ELbXlTcXO6UNinWNHuU+ALH
-Mp//8deOhn0orTzFD2TdQrl3EB2/lvl8hr6MHP5k9ReoCUQD1BAYPz6W5myO
-FrODurw/hActJVkpvQfYNAAm8bzQeNmJQlcyeIWDRvkcQoE/kpbHvgf5hdhQ
-V9ovPuwydXTmjxrA1YbihA8D1OJ6lnF5VJrHlFSI614BUYC8XrdlOZZe7KLs
-SAIc6oKEOmzcl489g6IlKREkFf45SasSp7E2Gk4tjgk3CIqw8doWzGXpSBKF
-ZiOJgykG/NkWnSSbcPzYSn8N/F+AWQqv2JUwGezUXbmWA1j/vzqf8helUtpO
-8QZLz+DwVgsbDEDxOU498gu4BJkIgJnAY4pdOXQRLs9gAcU0eei+NchAVExA
-/LllawCVHtG58KX1EzufliFoJSh3gmsfyESslHdI2mDIJFTYb9UPCOALJoC3
-QftTa2YgQj7LqviBL5dZkaMObChsp8ig5TLv0E8cEZu6UMuQSw3w+1p229F7
-NLfAuB/szfvs/Ori8hLKiR2stlw2dyrnOB8JV8CZTyK9vulvQzE5LAbZnebU
-szIckx2s6XHKmp541vS9Cinbi9zUhQXLibJdniLpretOIbRSoKdiM4uHy/WG
-imJykQLF6BGh0l/j9e8RZt1IhVGsp3X25FKqpA3DMGEnAM0KJXtl9BwN3s+D
-/cH+Dy2euh8CibG4ma02+NxDuA1108Z3rOuOx5ISGBcvDCGSB8BPw17x1ttZ
-ykTWzZatHx0Tvn9vrzVVflmQtZqQkcBkxAvlxrKuNYo9nMcTY5WDyo6MLwga
-eOzj8bO4FyOowPXzhTVLC+17jx6sD/kzcDHzWbNXLp3I80jaPBl/e+xYrG0C
-GEY4VhdG6lS4VgqRSiHMdKy0H3hkE1KWEh3Pa3geai0QLHCf99p9DsuHJdJC
-bYu8fs8n50MpgUI2C36+3KWug9a67ATRuS0BvzZHqeZ4pZC6nZk0Zr38PLM+
-mW7JROVvvha7JIXo0uCBwUNYx8rGrKEe7MrQMCxRrHJ5OJgozuFV6Ee7XdFP
-ipwl9zyReHZAvyZ5az8HqlA3g6gqg6C+i8gbnCKevLMHbghoBWJfQN0P8AWD
-wT9Vh3CXPewxVXv5s34e7ra7LTNf/AssHtxDhCsF+FJTRfocib7frLand4Jz
-LIYX2Mdh4o8KFc8VQ85n+7u3lyPr0MtvXtcVmazGyMUZY5b26GdlVxabs5qJ
-yKVGRe+C/mwd5IOUj7pRvgkKEdqsduZojJ7QE5eIGrICet8Ww1epcjXiK9Um
-On0Ud70xwrWqoarp7DKhSd7cLJoZ58YLLwz5Xt2G7Kxlug2gBYakb1nS7Out
-6lp8yJ81p9NiE1yDXlgCSqI8/+pZBM1EwZyzFrSNlCuafhxBdYDbcY+gbt2N
-kTgh0DsD0wkBXr4gulO/VwS9sjNKWsTuxrpzzaum6QTRETvLxtZIErrYgtBZ
-SW8LK1pA0y/ql0LbHCqUbw4dk475d5G6kUjB/EvzKwY9kqUEgq81gFIe0Zar
-OGkgpLU8VHM6tkLW5/7CZsja33jY3JgV8juGIH6+w3G5rQCUUvXzlwHl1Ewn
-FZxUxq6UKsZ86EJjrkQ9mHwR2CbERFqdMla3g/nkK2iqRuThGL7cp0EzBFuk
-fWRHor4yi9G8YvO/DqtDjn5xncsQ7vrFpm6SWG90ERuW+hztkF3ts7DZDx7z
-T+FHSBOzR7Za6uo2p0JiQrqk40HX1JErh+sKCRLN95tY79gZUzuEODZ07iQ5
-APHB//APguDlDedwHlcfoFg4xSBhJLL72qRJ/PkKIbsro4bAtyAYKGYme51f
-FmjMmhsy1tLM52q7xfmOHM6fXWPl/SkbdO8kc5RTccUmDivCPJ51VEvED3sc
-3BmNwGqB7URY7UwwOQ9cvrOBCe4sghrnG+l5l/0oroJLybNjc6QYsqOMi1Mo
-9Jwj9BGCHNXE0vIRQuP3oV1LO+X6+kjBn1jSWnI1blAjVvtHhwGyF3antmMt
-hrhIonLjxH17cHn1Jnty/OzZ+JhE8eo2H59kHz/Sl/zdp0940pOT8Yx48PnV
-606wY8++fP4EvU5ZYRW2Ik09pH6odcHybxJOvmVAE2MvmeLmcAZuGae0IK4C
-lHJacQXy6Vi3WrGhLPSMeGFNh7BLH9llJ6PsyYgkGE/r+DE9ns9wPYdP3QPK
-wGcey0JaZSjhPMyvo2kgRusRrNYj6dfKJorUerYqWKHaxi2ZAcrZCodGcvA3
-rNhZDNn4r80uqQcHlEEny6oPeo3v1OzU7VSGY+qKKvxcq3LIbidI4D7ndAUO
-F69i/2zfMxuwYXCjf6JL9pbA8yNNuD23ub1FPd2GGVBhmKOHi5Wbn23butI2
-9UlfhbQKiC86Ewj888J0WKpa0kqH9f5/YZXxz1QEH4rS9NRYPosr28MAkXzd
-SVF2DRGRxOqyfVLZyx5NXIKUA4iumsuxO0BbG7nG3At56GlYbFm1NJTIzUPN
-E5r1viv9hVyx/YeCZnw/8m1jr7AkUgH60LLiglQg+5DMuHEod7IfMYl51ZlP
-LfcANh5UW9La1lu5jnBJvlIJqQpQLGlwmUhSjTrmKnoHAtV8ZtyGZ5gZAvEK
-v71bg5F6Uu28J4g7NQqdXLY4l43toeo/srJZ6MdJM9yT3lHxVaX27BkOyYre
-mdoR6jjtfulIwNQWMmGdl6TBewZEn7oAfMwlPDrqlmOrv0Bb+57d2gvJ4Be/
-97IpykXSr0qWCZnactjTRihfjEJ8JclxiEiLJNuF0SzVCoUO3NVfjtR4Mpx/
-rUUSDGjIHe4TB9p2P5ZD9WZwvfRgctEcZ+tqgdIxtFAH6WoWVhlDwgZmW+FA
-pFnFx65ownaA07f5i/PmKVSxsxiDBfJ0QqGpys5IZTo7rUJheZGPLCXykTtO
-XecwmuEIH+7awdip9zCOGJsYfnl2aMhOpROu7CMeFBqfytHQhwkgK9RE3ZWg
-eBB0BKKnZ5Mnh6PtGmaKM9mJ9lbc23DhVegL7KPVTm7htq/c1HausAqkWFfI
-COsgISuE+BZJ1TCQTYQtJMYF8nEnWx5mv5/P4fbH2XWQ3M2pW2xX88Yis+Og
-9ybdjphZlZx8xLkduVRWEK+iU+uc8z3JRDox5xMKXsCP4usxFmLomeVlrXNR
-7N7YtciPfNYwmsxNQPLBay3VkQyMYSKP3mgC84MsNan1zsWMiO+bRsQp70AN
-H7y6fJd9U83ZUDlkJ9lt36+600ePbohbrGcTmvijK0557G/v5idPHiXsQSjn
-Z28wjqmwXd/IhYb57ebbS/Fv+EdbheB49zRAnBTBEOuNQmwn12aPJ88mj8Mz
-/HMfT46PJ4/NPULbWmOxnGlJSlMOF9E+X/NvYIDo4HAhpdovYaXtE5n35YII
-aYkAf15lj7Jv2wYh5tfnr1+cI2k0b+e3h1pqSCre/MBhtI+/auXjJ9lFoM/H
-Lrg2qCxvEOoB1MP1jQNvjSx5WTFfEyK+OH/0e1LjiGFkXzftekmcCOVgxt+6
-91123RonMD3rHz+++vbygowtlLcIBmaJolC5EYFP8hlzqVGfkmCGGTJ8fIKP
-y++ZZOfFX/M5JsUzia5TRB01M7+TJuHZaz7xVk/1jo3C89dX35+oSYjyqmOu
-dVNE2K2ik7pYfpXffv7t1XffvPz0aajfhbKAOE7c51i85XqQHwrMRZhYWqrY
-6iVL01RXNnY9Eyf0ZO//Ammcz+Gu4gAA
-
+H4sIAAAAAAAC/629fXMbV3I++j8/xRRTtyzyB0AiJcs2mdpcWpK9jG3JEWU7+aW2
+jCEwJGcFzjCYAWlYVj777X765fQZgLTXd1MpLwUMzpzXPv3y9NPj8Xinr/tFdVR8
+t1r09fisXS1nVfGiXS7b83ZZ9nXbFBftsjg5LU4uq6YvXtbdrL2tluud8vx8Wd0e
+DT/Pf7wzb2dNeU0vmC/Li348uyob+mtc8o/Gy+qy7vrlejyLvxk/OdyZlX112S7X
+R0XXz3fqm+VR0S9XXX/45MkX9HW5rMqj4qyarZZ1v965a5fvL5ft6uaoeF31/K/i
+J/pP3VwWX/PHO93q/LruOmq8X99QZ05fvftq5321pkfnRztFMeYBok8d/jX3UfK/
+rJv4R9ZVfNIvy6a7oS41s/VO19MAfy4XbUOvWVfdzk19VPx3385GRdcu+2V10dFf
+62v5Y9ZeX/NL/7ZTrvqrdil9qZuOBjcpXshk0WdFIZN4dlXSi6+yb9rlZdnUv6I/
+9ERfLRbl8rpu5t2krPFEdV3WC5pJ+fH/2215hObxqLjq+5vu6PHjbQ/MaJ6Pirf1
+7Oq6beb4iKeFX/miXNS0R5pa+jNrV03PK/dDU/fVnHpEa9kV7UVxcl0t61m507TL
+a+rubcXDffvVi8ODgy/0z88PPnumfz59+tQ+ffrF58/tgc8+/1T/fP7ZF0/5z9Oz
+N08PnuOBotDtvPuindNLeev2VxV19WZZdTTTsqOpLzyf6JR0t6Z/0JTyw/WyoO0y
+r29r3i+0SN+Xy744oHHKwOgX1PQu3pZWjf9vzGtBm6vpq2WDN5WL4k1YHvTnjHdI
+uZzrZ/jtnKboqDh8cvgE/+wq7lDdXLTWNI3xqOBRjg+O9LGXpy9fvHn7Kh/2y2pG
+o1zSivxKU386p3/UF3W17IpH9Hy3V9weTJ480Pefnr7IO3Q4fvKZvKFcXlZ92iR3
+d3eTu6cT+tXjd28fz+s5H+LqsXTsm1f/lffrHS0CPXNEZ674rqIXzx/uRPFiWaHz
+5aKjib++XtFmWutp3tqdp7PxbHY5uaz7q9X5pG7RpWu8akxv5Y69enl2+jXPXt63
+V/PDTz89+OKsvqRFWy0rfmJ773Awv5sUZze03dd/sB+LeTeu5BVjbvrxDi9sfgKe
+f/H8UP/84kD+fPHm9ek3Z4NNLZ8VXy5JtLF0+4am810QP0XfFq9oG/9AO6h7eAzf
+VXTEy/zjk0nx5aJs3pMAqJv8q3+nr9qmqcpV/vmrSfFVteirZuMFXy2ran5d5hv8
+4NN7NvgPZ69en/6ni3QaLD+8e+/WW9Fprn/B9pu1zUXFw68ey6edNnLw6eO+ml01
+JHMW466C/O8eR0nw+Npm4bvvT1/kky034vc0kTfVjNeqOO26Vdls3I+Pviy7alE3
+VfG2+p9Vvawg0gsSMM2c/9x7YKu/OHn85bK9o/kovmqXq+ut452V5xf8JUZLT5y8
+PvvxMO+sXMKv6Z00hcvbmjp5e1g8oif3aFmLly1dAc34pJlRF0gwvOO7tPi2XNN7
+cb2v+rZpr9tVl256ER79+oFt9OOEXrks/14uyo3lJ2m57JtqnYuT5+Mnz7aOkZ4o
+SW7N3lfLSV31FxgrKQ+PRW9o9DUkZKTZMW3620OejbMXp+/eDWajKU6Wsyu6fmZ8
+oDFEDJnu+/5qDUmfjg0rL3RcSVafrW5uFmu+XWkUxSO0vPfA+P9Kh6Jevr9qF7/+
+mUHxR+OObtZ+XIbuPlZB8OzTz/h9L09+ej1+8deTt+9evR0Ie9e5+HKF9lL8RHIH
++4AlPv1yj0ezpAvpoQuLtaHBMh3cdxNpc0fFTP6QUczLO9LbDv6xWdho4bENl4b6
+3enrN9+++Xp4j1SslrSL9nLtl/sfmoYHVpGk3lflclkt8o+/mRT/Vbb5Z29J9tMR
+6vv849cTeuFiUZfX3R+eR9ESqn78kveC6ccX6IhMZ5/GOn7y/M9ssHta82l+++o/
+BjdMJsH+WRP8clJ8Q7fVQ7P+52eMtXwZ4TL0nW2IPzFh2xvDgTx5O5wptV1O6F7p
+WNF9W3XtYuV63jdNe9eQSDn/Ox1rmbB2RbLm9VmYUJHID13VtOXelt37cpl/TOYB
+jIGL/OPvYTUs6/+fk7rEG8VKq2fju+p8fEH6GF141Zymxsb5J2f5D7bO0/7i5Puz
+H759tSnecUWdzDDbL8qbbrWoiu+X7UW9EHEP2f3AtNL8fVdfbVxOf+qYXddXJsZh
+1pbo1ngm3Xq8szMej4vyvOMm+p0dMzWTlVnMqxtSFsgeachKZBO8IxtkdlWUnRmf
+tGwjGC28hny/0z9J0d4RDZf+wXcaWc1keV52E7ryb8kGmBedKbXcdEn/vyR7gHpR
+zFt6R9P2xfm6qHvSXy7IPmzvdvqrsi9K7UVxVcpDd7R5r6rFnL5ZVqTnz0d0c6An
+tO/rhjQwnAEak3zdkSK6M68voJf1RXuOR5fUsXdXdUcvn634ZBWsWrF90vkrxxiI
+6Mc0nU3b0RbZuVm2s2puV3kwwUkHJisVs5deBLUMxh2PmKd6UpzSkKsLUtK6ndmi
+rK8L+i8d3AvSDflpMsXLpoWmWNzW1R1N6LwSkVlzD3itykvSaNFtamdOr+5GO9dQ
+Em9L0icvq4Jlxm0rLeL3M2mbun9TXopzY04aJ9uQzUUNG4C/5yHzSlXznVy1fCuz
+ydNWFWkS6K/5ijcJzSkNoTynTV/d1nPWgTFDFXwX3V1V3Yx4fRYr7m+RRsBvpHOw
+uqAJqHnPhpmjNaR923eYNPJQ3LSkO+/wFnBPyLg0oZeOK8/3e8i8TmXeEbaL/OIT
+3slNdcd93dEHxn07lqNWnMuM0iosl7odaDJ5PCOzy8P4y54OxPmK3Qrljm5VHAse
+I73+hrYaCZS5N8t+j4ovM9oQPKJyiZ3Ts1Mmrs7OoqSPac/zBLLXgPRFaoZOQVz/
+iZzo63o+p8Hs/AsLUawImtg5CcdMjwgdsjIcd+0ybbninHu+uBjPKv7Jmrp1RP3y
+r7ApRBboyeSzRodnqWtPU0DHlz/F8WsvLmCJ0HhoeXmdi+oXtl/4nKpCz0eXLGK6
+QNKL62zT0vEtr2kSeZKw7vJuHZTsi7IhwcCbi+aPdlh9s6h4o9PEUTdI0S5aTPl5
+dVXe1nTFFeUteaGwVclILRubhaNif79V59z+Phq8u6pZ9tk0Qfi0ZEZnAkx3Be0G
+Wi/8QRu/ImkVJt+FH70R07U+xu/29+NJ3f5WrFyHkWQCzlpnEVdsEXGjoiqpHd54
+dCJX5YIMCshiNqBxhKBY8IvIo8kKPx5JLZGYqpqO5kU3aidH6z4xN5IV4k3AZ++C
+JplHfA3/Fw/WBAPt2vuEL5Y3vQ4L7E466txF/QueIh8O/YRXKhzGR9vkKU/omYi/
+4tkIP2Wxin3Kt2D8/lP5nmcgfvxcPo6SEkeIdhrv8PDkZ/IkzhGNerasb/D5dcXu
+5rq7jg9/Lg+fNCQdSU2YtTdZW18kebNNFMdHD57s6cPkje5lfs7XfTVe0CFYFBdV
+T/uATpHtqBIbuG5Y9OEc1Nd0aK7dK0lnjxZvREdmVpIjg56kC4i6tyzP6wWf20XN
+O5J6IPPiu8M6bFcz39h1E84YCd+7Wi5PmkjaCK/piUo0D9131L9zcp1XVYMtb1oI
+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
+P4eeJjv/H9oxT6JyIQEA
 -->
 
 </rfc>
