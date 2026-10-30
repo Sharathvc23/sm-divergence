@@ -128,16 +128,17 @@ jobs:
           fi
 
       - name: Create any tags listed in .release-tags
-        # One `name<TAB-or-space>commit` per line; a tag that already exists is
-        # left alone. Used for draft-NN markers that pair a draft revision with
-        # the code that implements it.
+        # One `name commit message...` per line; `HEAD` means the commit being
+        # built. A tag that already exists is left alone. Used for draft-NN
+        # markers that pair a draft revision with the code that implements it.
+        # Note: GITHUB_TOKEN may not push a ref whose target changes workflow
+        # files relative to the branch, so tag HEAD (or a commit with identical
+        # .github/workflows) rather than an arbitrary older commit.
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.decide.outputs.version }}
         run: |
-          exec > >(tee /tmp/tags-step.log) 2>&1
-          trap 'rc=$?; if [ $rc -ne 0 ]; then gh release edit "v$VERSION" --notes-file /tmp/tags-step.log || true; fi; exit $rc' EXIT
-          set -euxo pipefail
+          set -euo pipefail
           [ -f .release-tags ] || exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -146,6 +147,7 @@ jobs:
             if git ls-remote --exit-code --tags origin "refs/tags/$NAME" >/dev/null 2>&1 </dev/null; then
               echo "$NAME exists"; continue
             fi
+            [ "$COMMIT" = "HEAD" ] && COMMIT="$GITHUB_SHA"
             git cat-file -e "$COMMIT^{commit}" </dev/null
             git tag -a "$NAME" "$COMMIT" -m "${MSG:-$NAME}" </dev/null
             git push origin "refs/tags/$NAME" </dev/null

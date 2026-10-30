@@ -1,4 +1,4 @@
-# tag  commit  message
+# tag  commit-or-HEAD  message
 # Tags the release workflow creates on the next push to main if missing.
 # draft-NN pairs an Internet-Draft revision with the code that implements it.
-draft-02 934d8715467e1b7718094e608926d7e8a826da90 draft-chandra-agent-registry-corroboration-02 (submitted 2026-10-30) = sm-divergence 0.12.0 + sm-resolver 0.7.0
+draft-02 HEAD draft-chandra-agent-registry-corroboration-02 (submitted 2026-10-30) = sm-divergence 0.12.0 + sm-resolver 0.7.0
