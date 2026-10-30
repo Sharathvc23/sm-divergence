@@ -57,3 +57,14 @@ ignore = ["E501"]
 python_version = "3.11"
 strict = true
 files = ["sm_divergence"]
+
+# The kernel is a sibling repo released on its own cadence. Development and CI
+# resolve it from its git history at a pinned commit, so this repo is never red
+# merely because the kernel's PyPI release has not landed yet; `uv sync` with
+# only the PyPI index would fail that way with a misleading "Python version"
+# hint. This table does NOT reach the published wheel (PEP 621 metadata above
+# does), so the release workflow separately refuses to publish until the floor
+# in `dependencies` is actually on PyPI (see `scripts/check_kernel_published.py`).
+# When bumping the kernel: change the floor above, this rev, and run `uv lock`.
+[tool.uv.sources]
+sm-resolver = { git = "https://github.com/Sharathvc23/sm-resolver", rev = "296cb7469791d7f399502dedc910f00258c97763" }

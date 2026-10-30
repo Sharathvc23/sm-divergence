@@ -34,6 +34,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Refuse to publish before the kernel is on PyPI
+        # The wheel's metadata says `sm-resolver>=X`; dev/CI get X from git, a
+        # PyPI consumer cannot. Fails with the exact tag command to run first.
+        run: python scripts/check_kernel_published.py
+
       - name: Build sdist + wheel
         run: |
           python -m pip install --upgrade build

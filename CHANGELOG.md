@@ -35,6 +35,14 @@ Aligns the discovery layer with registry-assisted resolution of known subjects
 
 ### Changed
 
+- **Kernel resolves from git for development and CI; release gated on PyPI.**
+  `[tool.uv.sources]` pins `sm-resolver` to a commit, and CI runs
+  `uv sync --locked`, so this repo cannot go red because the kernel's PyPI
+  release has not landed yet (the failure mode of 0.12.0's first CI run, which
+  uv reports with a misleading "Python version" hint). The published wheel
+  still declares `sm-resolver>=0.7` to PyPI consumers, so the release workflow
+  now refuses to publish until that floor is actually on PyPI
+  (`scripts/check_kernel_published.py`), with the tag command to run first.
 - **Record format `corroboration/0.4`.** A claim entry whose view exposes a
   lease position carries `binding: {sequence, scope}`, so a `stale_binding`
   finding is re-derivable from recorded bytes. `0.1`–`0.3` remain verifiable.

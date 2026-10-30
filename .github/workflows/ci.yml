@@ -17,8 +17,10 @@ jobs:
       - name: Pin Python
         run: uv python pin ${{ matrix.python-version }}
       # The same gate as `make ci-local` — green locally == green here.
-      # sm-resolver (the kernel) resolves from PyPI.
-      - run: uv sync --extra dev
+      # sm-resolver (the kernel) resolves from its git history at the commit
+      # pinned in pyproject [tool.uv.sources], never from PyPI, so a kernel
+      # release that has not landed yet cannot turn this job red.
+      - run: uv sync --locked --extra dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy sm_divergence
