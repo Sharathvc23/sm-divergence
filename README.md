@@ -33,14 +33,31 @@ self-description and the signed
 and identity layers.
 
 `-01` is the published revision. `-02` is prepared and is what this release
-implements: it adds the claim-outcome vocabulary and requires a record to name
-its signature algorithm. Both revisions and the diff between them are on the
+implements: it adds the claim-outcome vocabulary, requires a record to name
+its signature algorithm, and aligns corroboration with **registry-assisted
+resolution of known subjects** — the DAWN-aligned profile under which a
+registry resolves a Known Subject (an agent name, an email, a DID) to a
+*terminal* target in one hop, as a renewable lease with a `sequence`. This
+release reads that sequence: a registry one step behind is attributed as
+`stale_binding`, never accused of tampering, and two registries agreeing on an
+address but not on its `targetDigest` are reported as `digest` — substitution
+at the host, which an endpoint comparison cannot see. Both revisions and the diff between them are on the
 datatracker, and the text of each is committed under [`draft/`](draft/),
 byte-identical to what the IETF serves.
 
 Requires Python 3.11 or later. The core has no cryptography dependency;
 signing and verification live in the `attestation` extra, so you pull it only
 when you use it.
+
+> **The registry points; corroboration proves.** Resolution is one registry's
+> answer for one known subject: a target, its authority evidence, its lease
+> position. Corroboration is what a verifier does when it holds two such
+> answers. This library never evaluates authority evidence — whether a target's
+> authority is acceptable is local policy, and a sweeper that let it move the
+> verdict would be doing trust evaluation. The issuer is carried as provenance
+> and as the scope a sequence counts in. The sweeper is an auditor over a
+> bounded, explicitly configured source set, and every lookup is exact: no
+> enumeration, no fan-out beyond that set, no registry-to-registry forwarding.
 
 > **Records carry their algorithm, bound to the key.** From
 > `corroboration/0.3` a record names its signature algorithm, and a verifier
@@ -76,12 +93,14 @@ pip install "sm-divergence[attestation]"  # + verified-DID checks (Ed25519/did:k
 import asyncio
 from sm_divergence import check_once
 
-results = asyncio.run(check_once(
-    ["https://registry-a.example", "https://registry-b.example"],
-    ["agent-1", "agent-2"],
-))
+results = asyncio.run(
+    check_once(
+        ["https://registry-a.example", "https://registry-b.example"],
+        ["agent-1", "agent-2"],
+    )
+)
 for r in results:
-    print(r.agent_id, r.verdict)          # agent-1 DIVERGENT   (AGREE / DIVERGENT / INSUFFICIENT)
+    print(r.agent_id, r.verdict)  # agent-1 DIVERGENT   (AGREE / DIVERGENT / INSUFFICIENT)
     for f in r.findings:
         print(" ", f.kind, f.confirmation, f.detail)
         # endpoint suspected {'field': 'endpoint',
@@ -106,7 +125,7 @@ detector = DivergenceDetector(
     on_finding=lambda f: alert(f.kind, f.agent_id, f.detail),
     staleness_window_s=300,
 )
-await detector.check(watch_ids=my_agent_ids)   # call each poll cycle
+await detector.check(watch_ids=my_agent_ids)  # call each poll cycle
 ```
 
 ### The Corroboration Record
@@ -121,22 +140,25 @@ from sm_divergence import sign_sweep, verify_corroboration_record
 
 records = sign_sweep(results, sweeper_private_key=my_ed25519_key)  # needs [attestation]
 # record_id = SHA-256(JCS(body)); signed by the sweeper's did:key
-assert all(verify_corroboration_record(r) for r in records)        # verifies offline
+assert all(verify_corroboration_record(r) for r in records)  # verifies offline
 ```
 
 ## CLI
 
 ```bash
 python -m sm_divergence check \
-    --registry https://registry-a.example \
-    --registry https://registry-b.example \
-    --watch agent-1 --watch agent-2
+    --resolution-registry https://registry-a.example \
+    --resolution-registry https://registry-b.example \
+    --watch orders@moon-bakery.example
 ```
 
 Exit **0** when the sources agree, **2** when any divergence is found (so a cron
-or CI step fails loudly), **1** on a usage error. Add `--json` for machine
-output, `--attestation` to also compare verified DIDs, `--nanda-index URL`
-beside `--registry URL` to corroborate a NANDA Index.
+or CI step fails loudly), **1** on a usage error. `--resolution-registry URL` is
+a Resolution Registry implementing the `known-subject-resolution-02` profile
+(`POST /resolve`; `--identity-type` sets the Subject Identity type, default
+`agent-name`); `--registry URL` a NEST-style by-id registry; `--nanda-index URL`
+the legacy two-hop Index. They mix freely. Add `--json` for machine output,
+`--attestation` to also compare verified DIDs.
 
 ## What it compares
 
@@ -149,6 +171,8 @@ for omission), so a consumer parses findings the same way at every layer.
 | --- | --- |
 | `omission` | One source serves the id; another **positively** reports it absent (404 / soft-404). An *unreachable* source is excluded — a timeout is not a claim. |
 | `endpoint` | Discovery sources disagree on an agent's endpoint. |
+| `digest` | Discovery sources agree on the endpoint but disagree on the integrity digest of what it serves (`targetDigest`) — the same host serving two documents. Compared only when both sides carry one. |
+| `stale_binding` | A registry serves a subject-to-target binding whose lease `sequence` is below the current one in the same authority scope. Attributed to that source and withheld from the field comparison: being behind is not disagreeing. |
 | `did` | Discovery sources with a **verified** attestation disagree on the key. One valid record + one forged one is *not* a disagreement — only proven DIDs count. |
 | `key` | Identity sources (DID methods) disagree on the agent's verification key. |
 | `source_equivocation` | One source, observed from several **vantages**, disagrees with *itself* on a field — equivocation by that source, distinct from disagreement between sources. |
@@ -183,10 +207,12 @@ wire format and normalizes its answer to the same view the diff understands:
 ```python
 from sm_divergence import DivergenceDetector, HttpByIdResolver, NandaIndexV2Resolver
 
-await DivergenceDetector([
-    HttpByIdResolver("https://nest.example"),        # GET /api/agents/{id}
-    NandaIndexV2Resolver("https://index.example"),   # two-hop resolve → record
-]).check(["agent-1"])
+await DivergenceDetector(
+    [
+        HttpByIdResolver("https://nest.example"),  # GET /api/agents/{id}
+        NandaIndexV2Resolver("https://index.example"),  # two-hop resolve → record
+    ]
+).check(["agent-1"])
 ```
 
 **Identity layer** — catches a `did:web` (or a Universal Resolver) serving a
@@ -196,10 +222,12 @@ different verification key than the agent's self-certifying `did:key` root, a
 ```python
 from sm_divergence import Corroborator, DidKeyResolver, DidWebResolver
 
-await Corroborator([
-    DidKeyResolver(did_for=lambda a: agent_did_key[a]),   # offline root of truth
-    DidWebResolver(did_for=lambda a: agent_did_web[a]),   # fetched, may be hijacked
-]).check(agent_ids)
+await Corroborator(
+    [
+        DidKeyResolver(did_for=lambda a: agent_did_key[a]),  # offline root of truth
+        DidWebResolver(did_for=lambda a: agent_did_web[a]),  # fetched, may be hijacked
+    ]
+).check(agent_ids)
 ```
 
 **A new format or layer is a thin adapter** — a view with a `comparable()` and a
@@ -210,15 +238,20 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from sm_divergence import Corroborator
 
+
 @dataclass(frozen=True)
 class MyView:
     field: str | None = None
+
     def comparable(self) -> Mapping[str, str | None]:
         return {"field": self.field}
 
+
 class MyResolver:
     label = "src-a"
-    async def resolve(self, agent_id): ...   # -> (Status, MyView | None)
+
+    async def resolve(self, agent_id): ...  # -> (Status, MyView | None)
+
 
 await Corroborator([MyResolver(), ...]).check(agent_ids)
 ```
@@ -232,8 +265,13 @@ own signature:
 
 ```python
 from sm_divergence import (
-    build_self_description, HttpDescriptionResolver, corroborate_descriptions,
-    signed_alias_for, DidWebResolver, AliasClosureResolver, binds_by_key,
+    build_self_description,
+    HttpDescriptionResolver,
+    corroborate_descriptions,
+    signed_alias_for,
+    DidWebResolver,
+    AliasClosureResolver,
+    binds_by_key,
 )
 
 # the agent signs (bumping seq on every re-issue), with its did:key's private key.
@@ -241,15 +279,17 @@ from sm_divergence import (
 bundle = build_self_description(
     aliases={"web": "did:web:acme.org", "nanda": "urn:ai:…:acme"},
     endpoints=["https://acme.example/agents/acme"],
-    private_key=agent_ed25519_private_bytes, seq=5,
+    private_key=agent_ed25519_private_bytes,
+    seq=5,
 )
 
 # a consumer fetches the description from EVERY source and reconciles it —
 # omission / replay / agent-equivocation on the description itself become findings:
 recs = await corroborate_descriptions(
-    [HttpDescriptionResolver(s) for s in source_urls], ["acme"],
+    [HttpDescriptionResolver(s) for s in source_urls],
+    ["acme"],
 )
-canonical = recs["acme"].canonical                       # None if the agent equivocates
+canonical = recs["acme"].canonical  # None if the agent equivocates
 sds = {"acme": canonical} if canonical else {}
 
 # drive resolvers from the PROVEN aliases, with closure so a claimed alias that
@@ -268,6 +308,7 @@ use the built-in adapter (needs the `attestation` extra):
 
 ```python
 from sm_divergence import DivergenceDetector, signed_record_adapter
+
 DivergenceDetector(registries, adapter=signed_record_adapter())
 ```
 
@@ -291,7 +332,7 @@ make ci-local   # uv: sync → ruff → format → mypy --strict → pytest
 
 ---
 
-*First published: 2026-07-04 | Last modified: 2026-08-28*
+*First published: 2026-07-04 | Last modified: 2026-10-30*
 
 *Published by [Stellarminds.ai](https://stellarminds.ai) under the MIT licence.
 Aligned with [Project NANDA](https://projectnanda.org) standards.*

@@ -4,6 +4,46 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] — 2026-10-30
+
+Aligns the discovery layer with registry-assisted resolution of known subjects
+(the DAWN-aligned `known-subject-resolution-02` profile). Tracks
+`draft-chandra-agent-registry-corroboration-02` (in preparation). Requires
+`sm-resolver` 0.7.
+
+### Added
+
+- **`KnownSubjectResolver`** (`discovery/known_subject.py`) — one hop,
+  `POST /resolve`, terminal target. Maps a Resolution Target Object onto the
+  view: `targetUrl` → `endpoint`, `targetDigest` → `digest`, `sequence` and
+  `authority.issuer` → the lease position. Expired, revoked, sequence-less or
+  registry-as-target responses are `error` claims with outcomes that say why
+  (`expired`, `revoked`, `unverifiable`, `refused`); RFC 9457 problem codes map
+  onto the same vocabulary. Optional registry-provenance check. Never evaluates
+  Authority Evidence, never fans out, never follows a registry as a target.
+- **`RecordView.digest`** — compared when both sides carry one. Two registries
+  agreeing on an address but not on what it serves is host-level substitution,
+  a kind the endpoint comparison could not express.
+- **`RecordView.sequence` / `sequence_scope` / `authority_issuer`** and
+  `RecordView.binding()` — the lease position, read by the kernel's
+  supersession rule. Not compared.
+- **`stale_binding`** surfaces in the discovery layer: a registry one sequence
+  behind is attributed, not accused of tampering.
+- CLI: `--resolution-registry URL` (repeatable) and `--identity-type TYPE`.
+- `examples/known_subject_sweep.py` — stale vs. tampered vs. unrelated-scope,
+  network-free.
+
+### Changed
+
+- **Record format `corroboration/0.4`.** A claim entry whose view exposes a
+  lease position carries `binding: {sequence, scope}`, so a `stale_binding`
+  finding is re-derivable from recorded bytes. `0.1`–`0.3` remain verifiable.
+- `NandaIndexV2Resolver` is marked **legacy**: the two-hop "index points,
+  registry proves" topology is what the known-subject profile forbids (no
+  inter-registry forwarding; a target MUST NOT be a generic Resolution
+  Registry). Kept for registries still exposing it; unchanged in behaviour.
+- README and SPEC §7.1, §9 updated; spec version `divergence/0.4-draft`.
+
 ## [0.11.0] — 2026-08-28
 
 Three review findings on `-01`. Tracks

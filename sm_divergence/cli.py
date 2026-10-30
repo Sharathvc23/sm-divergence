@@ -1,9 +1,13 @@
 """``python -m sm_divergence`` — one-shot divergence check for cron / CI.
 
     python -m sm_divergence check \
-        --registry https://registry-a.example \
-        --registry https://registry-b.example \
-        --watch agent-1 --watch agent-2
+        --resolution-registry https://registry-a.example \
+        --resolution-registry https://registry-b.example \
+        --watch orders@moon-bakery.example
+
+(``--resolution-registry`` is a Resolution Registry implementing the
+``known-subject-resolution-02`` profile; ``--registry`` is a NEST-style by-id
+registry; ``--nanda-index`` the legacy two-hop Index. They mix freely.)
 
 Exit code is 0 when every watched id agrees (or is INSUFFICIENT), 2 when any id
 is DIVERGENT (so a cron or CI step fails loudly), and 1 on a usage error.
@@ -25,7 +29,14 @@ from collections.abc import Sequence
 from sm_resolver import Resolver, SweepResult
 
 from .detector import check_once
-from .discovery import DEFAULT_PATH, NandaIndexV2Resolver, RecordAdapter, RecordView, default_adapter
+from .discovery import (
+    DEFAULT_PATH,
+    KnownSubjectResolver,
+    NandaIndexV2Resolver,
+    RecordAdapter,
+    RecordView,
+    default_adapter,
+)
 
 EXIT_OK = 0
 EXIT_USAGE = 1
@@ -45,11 +56,27 @@ def _build_parser() -> argparse.ArgumentParser:
         help="NEST-style by-id registry base URL (repeatable).",
     )
     check.add_argument(
+        "--resolution-registry",
+        action="append",
+        default=[],
+        metavar="URL",
+        help=(
+            "Resolution Registry base URL implementing the known-subject-resolution-02 profile "
+            "(POST /resolve; repeatable). Watch ids are sent as the Subject Identity."
+        ),
+    )
+    check.add_argument(
+        "--identity-type",
+        default="agent-name",
+        metavar="TYPE",
+        help="Subject Identity type sent to --resolution-registry sources (default: agent-name).",
+    )
+    check.add_argument(
         "--nanda-index",
         action="append",
         default=[],
         metavar="URL",
-        help="NANDA Index v2 base URL — two-hop resolve (repeatable). Watch ids are used as locators.",
+        help="NANDA Index v2 base URL — LEGACY two-hop resolve (repeatable). Watch ids are used as locators.",
     )
     check.add_argument("--watch", action="append", default=[], metavar="ID", help="Agent id to compare (repeatable).")
     check.add_argument(
@@ -90,8 +117,12 @@ async def _run_check(args: argparse.Namespace) -> int:
     watch = [w for w in args.watch if w]
     http_registries = [r for r in args.registry if r]
     index_urls = [u for u in args.nanda_index if u]
-    if len(http_registries) + len(index_urls) < 2:
-        print("error: need at least two registries (--registry / --nanda-index) to corroborate", file=sys.stderr)
+    resolution_urls = [u for u in args.resolution_registry if u]
+    if len(http_registries) + len(index_urls) + len(resolution_urls) < 2:
+        print(
+            "error: need at least two registries (--registry / --resolution-registry / --nanda-index) to corroborate",
+            file=sys.stderr,
+        )
         return EXIT_USAGE
     if not watch:
         print("error: need at least one --watch id", file=sys.stderr)
@@ -105,6 +136,12 @@ async def _run_check(args: argparse.Namespace) -> int:
 
     registries: list[str | Resolver[RecordView]] = list(http_registries)
     registries += [NandaIndexV2Resolver(u, adapter=adapter, timeout=args.timeout) for u in index_urls]
+    identity_type: str = args.identity_type
+
+    def subject_for(agent_id: str) -> tuple[str, str]:
+        return agent_id, identity_type
+
+    registries += [KnownSubjectResolver(u, subject_for=subject_for, timeout=args.timeout) for u in resolution_urls]
 
     results = await check_once(registries, watch, adapter=adapter, path=args.path, timeout=args.timeout)
 

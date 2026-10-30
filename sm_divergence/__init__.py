@@ -63,9 +63,11 @@ from .detector import DivergenceDetector, check_once
 from .discovery import (
     DEFAULT_PATH,
     DID,
+    DIGEST,
     ENDPOINT,
     AnsV2Resolver,
     HttpByIdResolver,
+    KnownSubjectResolver,
     NandaIndexV2Resolver,
     RecordAdapter,
     RecordView,
@@ -77,6 +79,7 @@ from .discovery import (
     looks_absent,
     normalize_endpoint,
     signed_record_adapter,
+    target_to_view,
     verified_did,
 )
 from .identity import (
@@ -136,6 +139,7 @@ __all__ = [
     "CORROBORATION_VERSION",
     "DEFAULT_PATH",
     "DID",
+    "DIGEST",
     "ENDPOINT",
     "KEY",
     "OMISSION",
@@ -152,6 +156,7 @@ __all__ = [
     "DivergenceDetector",
     "Finding",
     "HttpByIdResolver",
+    "KnownSubjectResolver",
     "HttpDescriptionResolver",
     "NandaIndexV2Resolver",
     "OnFinding",
@@ -195,6 +200,7 @@ __all__ = [
     "sign_sweep",
     "signed_alias_for",
     "signed_record_adapter",
+    "target_to_view",
     "verified_descriptions",
     "verified_did",
     "verify_corroboration_record",

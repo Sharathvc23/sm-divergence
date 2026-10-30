@@ -1,9 +1,9 @@
 # Corroboration Divergence — Detection Procedure
 
-**Spec version:** `divergence/0.3-draft`
+**Spec version:** `divergence/0.4-draft`
 **Status:** DRAFT / Working Draft
 **Version identifier (wire):** `divergence/0.3`
-**Last edited:** 2026-07-04
+**Last edited:** 2026-10-30
 **Signing/identity substrate (optional):** JCS canonicalization, Ed25519, `did:key` — the convention shared across the `sm-*` family.
 
 The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, MAY are to be interpreted as in RFC 2119.
@@ -178,11 +178,49 @@ check's full result.
 
 ## 7. Layer instantiations (reference)
 
-### 7.1 Discovery layer — `RecordView{endpoint, did}`
+### 7.1 Discovery layer — `RecordView{endpoint, did, digest}` + lease position
 
+The compared fields are `endpoint`, `did`, and `digest`. The view also carries a
+**lease position** — `sequence` and `sequence_scope` — exposed through
+`binding()` per kernel SPEC §3b, and an `authority_issuer` for the record. None
+of those three is compared: two registries validating the same subject through
+different issuers is the ordinary multi-registry case, and a sequence is only
+meaningful within one issuer's scope. The kernel's supersession rule (kernel
+SPEC §4e) uses the position to attribute a lagging registry as `stale_binding`
+and withhold its superseded target from the field comparison.
+
+- **Known-subject resolver** — the registry-assisted resolution profile for a
+  Known Subject without a usable DNS Discovery Anchor (`known-subject-resolution-02`),
+  one hop:
+  1. `POST {base}/resolve` with `{identity, identityType, maxResults,
+     acceptedMethods}`; the request MUST NOT carry intent, capability query, or
+     a next-registry field;
+  2. `200` with `targets: []` → `absent`; `404` → `absent`; a 4xx Problem
+     Details (`RFC 9457`) `code` → `error` with the outcome it maps to
+     (`unverifiable` / `revoked` / `stale` → `unverifiable`, `revoked`,
+     `expired`; `policy-rejected`, `unsupported-target` → `refused`;
+     `malformed-response` → `unparseable`); 5xx/transport → `error`;
+  3. one Resolution Target Object is selected (default: first non-`fallback`
+     target of an accepted method); a target whose `method` was not accepted —
+     in particular another registry, which the profile forbids as a terminal
+     target — is `error`/`refused`;
+  4. a target past `expiresAt`, or lacking it, or lacking `sequence`, is
+     `error` (`expired` / `unverifiable`) — a binding the profile says MUST be
+     treated as stale is not a claim of absence;
+  5. `targetUrl` → `endpoint`; `targetDigest` → `digest`; `sequence` and
+     `authority.issuer` → the lease position. No `did`: Authority Evidence is
+     not an agent-signed record.
+  Optionally the response's `registry.id` MUST equal the configured expected
+  identity, else `error`/`unverifiable`: provenance from a registry other than
+  the one configured is not a claim by the one configured. The resolver never
+  evaluates Authority Evidence (§10) and never fans out; one instance is one
+  configured registry.
 - **By-id resolver** — `GET {base}/api/agents/{id}` (path injectable), classified
   per §3, endpoint read from a top-level field.
-- **NANDA Index v2 resolver** — a two-hop pointer resolve:
+- **NANDA Index v2 resolver (legacy)** — a two-hop pointer resolve, kept for
+  registries still exposing it. Under the known-subject profile a registry
+  returns a terminal target and never another registry, so an index is one
+  registry among several and this shape is not used:
   1. `GET {index}/api/v1/resolve?locator={locator}` → `{registry_url, identifier}`
      (`404`/soft-404 → `absent`; missing/empty fields → `error`);
   2. `GET {registry_url}{record_path}` (default `/agents/{identifier}`) → the
@@ -304,13 +342,13 @@ record is the positive attestation a downstream consumer binds.
 
 ```
 {
-  "version": "corroboration/0.1",
+  "version": "corroboration/0.4",
   "record_id": "<CORR-DIGEST of every member except record_id and signature>",
   "subject": { "agent_id": "<id>", "did": "<did:key or null>" },
   "observed_at": "<RFC 3339 UTC, Z>",
   "staleness_window_s": <integer>,
   "verdict": "AGREE" | "DIVERGENT" | "INSUFFICIENT",
-  "claims":   [ { "source", "vantage", "status", "view", "outcome" }, … ],
+  "claims":   [ { "source", "vantage", "status", "view", "outcome", "binding"? }, … ],
   "findings": [ { "kind", "agent_id", "confirmation", "detail" }, … ],
   "sweeper": "did:key:z…",
   "signature": "<base64 Ed25519 over JCS of all other members>"
@@ -328,6 +366,12 @@ Rules:
 3. Count/window/time values are exact integers or strings; no JSON float appears.
 4. `claims` MUST include `error`-status entries (excluded from the diff, retained
    for audit).
+5. From `corroboration/0.4` a claim entry whose view exposes a lease position
+   carries `binding: {sequence, scope}`. A `stale_binding` finding names the
+   sequences it compared; the entries are where a verifier re-derives that
+   comparison from recorded bytes. A record with no `binding` members reads as
+   "no binding", which is the conservative interpretation, and earlier
+   versions remain verifiable.
 
 ## 10. Ownership map (what this is *not*)
 

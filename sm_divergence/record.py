@@ -18,7 +18,7 @@ member; ``record_id`` is the CORR-DIGEST of every member except itself and
 ``signature``)::
 
     {
-      "version": "corroboration/0.3",
+      "version": "corroboration/0.4",
       "alg": "EdDSA",
       "record_id": "<hex CORR-DIGEST>",
       "subject": { "agent_id": "<id>", "did": "<did:key or null>" },
@@ -46,7 +46,7 @@ from sm_resolver import Claim, SweepResult, ViewT
 
 from . import _signing
 
-CORROBORATION_VERSION = "corroboration/0.3"
+CORROBORATION_VERSION = "corroboration/0.4"
 
 # Versions this build will verify. Gated on a SET, never on equality with
 # CORROBORATION_VERSION: a record is evidence, and evidence issued before the
@@ -54,7 +54,9 @@ CORROBORATION_VERSION = "corroboration/0.3"
 # invalidate every record already in the wild on each bump. `0.2` adds
 # `declared`/`declaration_version` to each finding; their absence in a `0.1`
 # record reads as undeclared, which is the conservative interpretation.
-ACCEPTED_RECORD_VERSIONS: frozenset[str] = frozenset({"corroboration/0.1", "corroboration/0.2", CORROBORATION_VERSION})
+ACCEPTED_RECORD_VERSIONS: frozenset[str] = frozenset(
+    {"corroboration/0.1", "corroboration/0.2", "corroboration/0.3", CORROBORATION_VERSION}
+)
 
 # Versions issued before `alg` existed. Ed25519 is implied for these; the member
 # is REQUIRED from corroboration/0.3 onward.
@@ -67,13 +69,39 @@ DidFor = Callable[[str], str | None]
 
 def _claim_entry(claim: Claim[ViewT]) -> dict[str, Any]:
     view = None if claim.view is None else dict(claim.view.comparable())
-    return {
+    entry: dict[str, Any] = {
         "source": claim.source,
         "vantage": claim.vantage,
         "status": claim.status,
         "view": view,
         "outcome": claim.outcome,
     }
+    binding = _binding_entry(claim)
+    if binding is not None:
+        entry["binding"] = binding
+    return entry
+
+
+def _binding_entry(claim: Claim[ViewT]) -> dict[str, Any] | None:
+    """The claim's lease position, when its view exposes one (kernel SPEC §3b).
+    Recorded so a `stale_binding` finding is re-derivable from the record: the
+    finding names the sequences, and this is where a verifier checks them."""
+    view = claim.view
+    if view is None:
+        return None
+    method = getattr(view, "binding", None)
+    if method is None:
+        return None
+    try:
+        binding = method()
+    except Exception:
+        return None
+    if binding is None:
+        return None
+    sequence = getattr(binding, "sequence", None)
+    if isinstance(sequence, bool) or not isinstance(sequence, int):
+        return None
+    return {"sequence": sequence, "scope": getattr(binding, "scope", None)}
 
 
 def build_corroboration_record(

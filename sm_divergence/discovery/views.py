@@ -9,9 +9,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlsplit, urlunsplit
 
+from sm_resolver import Binding
+
 # Discovery field names (also the kinds of the findings they produce).
 ENDPOINT = "endpoint"
 DID = "did"
+# The integrity digest of the terminal discovery object a registry resolved to
+# (a Resolution Target Object's `targetDigest`). Two registries agreeing on the
+# endpoint but not on the digest have resolved to the same address serving two
+# different documents: tampering at the host, not at the registry. Compared only
+# when both sides carry one; a registry that serves no digest contributes None.
+DIGEST = "digest"
 
 _DEFAULT_PORTS = {"http": "80", "https": "443", "ws": "80", "wss": "443"}
 
@@ -123,10 +131,31 @@ class RecordView:
     record the caller could VERIFY (e.g. a valid signed attestation). An
     unverifiable identity contributes no ``did`` — one valid record plus one
     forged one is not a disagreement between two authorities.
+    ``digest`` — the integrity digest of the terminal discovery object
+    (``targetDigest``), when the registry serves one. Compared as a string.
+
+    The remaining members are **not compared**; they position the claim.
+    ``sequence`` / ``sequence_scope`` — the registry's renewable-lease position
+    for this binding and the authority scope that sequence counts in (the
+    Authority Evidence ``issuer``). Exposed through ``binding()`` so the kernel
+    attributes a lagging registry as ``stale_binding`` rather than comparing a
+    superseded target against the current one. ``authority_issuer`` is the same
+    issuer, carried for the record: two registries validating the same subject
+    through different issuers is the ordinary multi-registry case, so the issuer
+    is provenance, never a field whose disagreement is charged.
     """
 
     endpoint: str | None = None
     did: str | None = None
+    digest: str | None = None
+    sequence: int | None = None
+    sequence_scope: str | None = None
+    authority_issuer: str | None = None
 
     def comparable(self) -> Mapping[str, str | None]:
-        return {ENDPOINT: normalize_endpoint(self.endpoint), DID: self.did}
+        return {ENDPOINT: normalize_endpoint(self.endpoint), DID: self.did, DIGEST: self.digest}
+
+    def binding(self) -> Binding | None:
+        if self.sequence is None:
+            return None
+        return Binding(self.sequence, self.sequence_scope)

@@ -142,7 +142,7 @@ def test_a_current_record_without_alg_is_rejected() -> None:
     body = {k: v for k, v in base.items() if k not in ("record_id", "signature", "alg")}
     signed = {**body, "record_id": corr_digest(body)}
     signed["signature"] = sign(key, canonical(signed))
-    assert signed["version"] == "corroboration/0.3"
+    assert signed["version"] == "corroboration/0.4"
     assert verify_corroboration_record(signed) is False
 
 

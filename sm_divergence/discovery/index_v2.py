@@ -1,4 +1,11 @@
-"""NandaIndexV2Resolver — a THIN adapter for the NANDA Index v2 two-hop resolve.
+"""LEGACY two-hop shape. Kept for registries still exposing it; new deployments
+should resolve through ``KnownSubjectResolver`` (the ``known-subject-resolution-02``
+profile), under which a registry returns a terminal target and never another
+registry — the two-hop "index points, registry proves" topology is exactly what
+that profile forbids (no inter-registry forwarding; a target MUST NOT be a
+generic Resolution Registry). Under it an index is one registry among several.
+
+NandaIndexV2Resolver — a THIN adapter for the NANDA Index v2 two-hop resolve.
 
 This is the shape the whole kernel/layer seam exists to enable: a small file
 that maps one registry's protocol onto the ``sm-resolver`` ``Resolver`` contract,

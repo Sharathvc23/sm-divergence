@@ -53,7 +53,7 @@ def test_record_has_paper_shape_and_roundtrips() -> None:
         "sweeper",
         "signature",
     }
-    assert record["version"] == "corroboration/0.3"
+    assert record["version"] == "corroboration/0.4"
     assert record["verdict"] == "DIVERGENT"
     assert record["subject"] == {"agent_id": "x", "did": None}
     assert record["observed_at"] == "2025-07-04T03:33:20Z"
@@ -182,4 +182,33 @@ def test_a_missing_version_is_rejected() -> None:
 
 def test_records_are_built_at_the_current_version() -> None:
     record = build_corroboration_record(_divergent_sweep(), sweeper_private_key=_sweeper_key())
-    assert record["version"] == "corroboration/0.3"
+    assert record["version"] == "corroboration/0.4"
+
+
+def test_claim_entry_carries_binding_when_view_exposes_one() -> None:
+    """corroboration/0.4: a claim's lease position is recorded so a
+    ``stale_binding`` finding is re-derivable from the record's bytes."""
+    from sm_resolver import Claim, SweepResult
+
+    from sm_divergence.discovery import RecordView
+    from sm_divergence.record import build_corroboration_record
+
+    key = bytes(range(32))
+    bound = RecordView(endpoint="https://x", sequence=14, sequence_scope="https://issuer.example")
+    unbound = RecordView(endpoint="https://x")
+    result = SweepResult(
+        "a",
+        "AGREE",
+        1_700_000_000.0,
+        0.0,
+        [
+            Claim("r1", None, "present", bound, 1_700_000_000.0, "present"),
+            Claim("r2", None, "present", unbound, 1_700_000_000.0, "present"),
+        ],
+        [],
+    )
+    record = build_corroboration_record(result, sweeper_private_key=key)
+    by_source = {c["source"]: c for c in record["claims"]}
+    assert by_source["r1"]["binding"] == {"sequence": 14, "scope": "https://issuer.example"}
+    assert "binding" not in by_source["r2"]
+    assert by_source["r1"]["view"] == {"endpoint": "https://x/", "did": None, "digest": None}
