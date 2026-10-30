@@ -39,3 +39,14 @@ to PyPI over OIDC. Watch it under the repo's **Actions** tab.
 
 - The tag (`v0.7.0`) and `version` in `pyproject.toml` must match.
 - Dry run anytime, no upload: `python -m build && python -m twine check dist/*`.
+
+
+## Releasing is a version bump
+
+The `release` workflow runs on every push to `main`: it reads `version` from
+`pyproject.toml`, and if that version is not on PyPI it first checks that the
+kernel floor (`sm-resolver>=X`) is on PyPI (polling briefly so a kernel release
+pushed moments earlier can land), then builds, publishes, and creates the
+`vX.Y.Z` tag and GitHub release itself. A version already on PyPI is a no-op.
+Tags listed in `.release-tags` (draft markers) are created the same way. Nobody
+pushes tags by hand.
