@@ -134,17 +134,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           [ -f .release-tags ] || exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          grep -vE '^[[:space:]]*(#|$)' .release-tags > /tmp/release-tags || true
           while read -r NAME COMMIT MSG; do
-            [ -z "${NAME:-}" ] && continue
-            case "$NAME" in \#*) continue;; esac
-            if git ls-remote --exit-code --tags origin "refs/tags/$NAME" >/dev/null 2>&1; then
+            if git ls-remote --exit-code --tags origin "refs/tags/$NAME" >/dev/null 2>&1 </dev/null; then
               echo "$NAME exists"; continue
             fi
-            git tag -a "$NAME" "$COMMIT" -m "${MSG:-$NAME}"
-            git push origin "$NAME"
+            git cat-file -e "$COMMIT^{commit}" </dev/null
+            git tag -a "$NAME" "$COMMIT" -m "${MSG:-$NAME}" </dev/null
+            git push origin "refs/tags/$NAME" </dev/null
             echo "pushed $NAME -> $COMMIT"
-          done < .release-tags
+          done < /tmp/release-tags
