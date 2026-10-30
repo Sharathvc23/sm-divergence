@@ -133,7 +133,10 @@ jobs:
         # the code that implements it.
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.decide.outputs.version }}
         run: |
+          exec > >(tee /tmp/tags-step.log) 2>&1
+          trap 'rc=$?; if [ $rc -ne 0 ]; then gh release edit "v$VERSION" --notes-file /tmp/tags-step.log || true; fi; exit $rc' EXIT
           set -euxo pipefail
           [ -f .release-tags ] || exit 0
           git config user.name "github-actions[bot]"
