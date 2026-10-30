@@ -8,15 +8,19 @@ Agent Discovery*.
 | | Status |
 | --- | --- |
 | `-00` | Submitted 2026-07-04. Superseded. |
-| `-01` | Submitted 2026-08-27. **Current published revision.** Expires 2027-02-28. |
-| `-02` | Prepared (dated 2026-10-30). **Not submitted.** Ready for `idnits` and submission. |
+| `-01` | Submitted 2026-08-27. Superseded. |
+| `-02` | Submitted 2026-10-30. **Current published revision.** Expires 2027-05-03. Tag `draft-02` ↔ sm-divergence 0.12.0 + sm-resolver 0.7.0. |
 
 - Datatracker: <https://datatracker.ietf.org/doc/draft-chandra-agent-registry-corroboration/>
 - HTML: <https://datatracker.ietf.org/doc/html/draft-chandra-agent-registry-corroboration>
+- `-02` text: <https://www.ietf.org/archive/id/draft-chandra-agent-registry-corroboration-02.txt>
 - `-01` text: <https://www.ietf.org/archive/id/draft-chandra-agent-registry-corroboration-01.txt>
 
 **The files here are the bytes that were submitted.** `-01` was verified
-byte-identical to what the IETF serves; do not rebuild them in place. A rebuild
+byte-identical to what the IETF serves; `-02` was verified against the served
+copy by header, dates, section structure and Acknowledgements (the raw `.txt`
+was not fetchable from the environment that checked it; confirm with
+`curl -s https://www.ietf.org/archive/id/draft-chandra-agent-registry-corroboration-02.txt | cmp - draft/draft-chandra-agent-registry-corroboration-02.txt`); do not rebuild them in place. A rebuild
 changes the date line and therefore the expiry, and the published revision is
 immutable.
 

@@ -32,8 +32,8 @@ self-description and the signed
 [Corroboration Record](#the-corroboration-record) — plus the reference discovery
 and identity layers.
 
-`-01` is the published revision. `-02` is prepared and is what this release
-implements: it adds the claim-outcome vocabulary, requires a record to name
+`-02` is the published revision (submitted 30 October 2026) and is what this
+release implements: it adds the claim-outcome vocabulary, requires a record to name
 its signature algorithm, and aligns corroboration with **registry-assisted
 resolution of known subjects** — the DAWN-aligned profile under which a
 registry resolves a Known Subject (an agent name, an email, a DID) to a
