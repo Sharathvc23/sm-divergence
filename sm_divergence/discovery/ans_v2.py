@@ -24,16 +24,20 @@ disagreement between two authorities. Supply a cert-verifying ``adapter`` (the
 ANS analogue of :func:`sm_divergence.discovery.attestation.signed_record_adapter`)
 to bring a verified ``did`` into the comparison.
 
-**What a ``404`` means depends on the route.** Where the by-id route
-requires a credential and answers ``404`` both for an agent that does not exist
-and for one the caller may not see, a ``404`` is not a claim of absence. Pass ``not_found_is_absent=False`` whenever the caller is not
-the owner of every agent it sweeps; the ``404`` is then ``error`` — no claim —
-and never a false ``absent``. A sweep by a third party should read the public
-log instead (``AnsLogResolver``), which needs no credential and whose ``404``
-does mean absent.
+**What a ``404`` means depends on the route.** Where the by-id route requires
+a credential and answers ``404`` both for an agent that does not exist and for
+one the caller may not see, a ``404`` is not a claim of absence. So a ``404`` is
+``error`` — no claim — by default, and never a false ``absent``. Pass
+``not_found_is_absent=True`` only on a route whose ``404`` can mean nothing but
+"this agent does not exist". A sweep by a third party should read the public log
+instead (``AnsLogResolver``), which needs no credential and whose ``404`` does
+mean absent.
 
-**The record lists ``endpoints[]``.** ``ans_agent_adapter`` reads that shape;
-the default adapter reads a top-level ``endpoint`` only.
+**The record lists ``endpoints[]``.** The default adapter, ``ans_agent_adapter``,
+reads that shape: ``protocol`` selects the entry and ``target`` chooses whether
+``endpoint`` is the descriptor (``metaDataUrl``, with ``metaDataHash`` as
+``digest``) or the service endpoint (``agentUrl``). A record with no
+``endpoints`` list falls back to a top-level ``endpoint``.
 
 Split-horizon ANS (an ANS-3 DNS zone that answers differently by vantage) is
 caught by running two instances with the same ``label`` and different
@@ -106,7 +110,15 @@ def identity_ansname(agent_id: str) -> str:
 
 
 class AnsV2Resolver:
-    """Resolve a canonical id through an Agent Name Service instance (one hop)."""
+    """Resolve a canonical id through an Agent Name Service instance (one hop).
+
+    ``adapter`` maps the record to the view; by default it is
+    ``ans_agent_adapter(protocol=protocol, target=target)``, which reads the
+    record's ``endpoints[]`` list and falls back to a top-level ``endpoint``.
+    ``not_found_is_absent`` says what a ``404`` means on this route: ``False``
+    (the default) makes it ``error`` — no claim; pass ``True`` only where a
+    ``404`` can mean nothing but "this agent does not exist".
+    """
 
     def __init__(
         self,
@@ -114,18 +126,20 @@ class AnsV2Resolver:
         *,
         ansname_for: AnsNameFn = identity_ansname,
         record_path: str = DEFAULT_RECORD_PATH,
-        adapter: RecordAdapter = default_adapter,
+        adapter: RecordAdapter | None = None,
+        protocol: str | None = None,
+        target: Literal["descriptor", "service"] = "descriptor",
         timeout: float = 10.0,
         transport: httpx.AsyncBaseTransport | None = None,
         label: str | None = None,
         vantage: str | None = None,
-        not_found_is_absent: bool = True,
+        not_found_is_absent: bool = False,
     ) -> None:
         self.not_found_is_absent = not_found_is_absent
         self.ans_url = ans_url.rstrip("/")
         self.ansname_for = ansname_for
         self.record_path = record_path
-        self.adapter = adapter
+        self.adapter = adapter if adapter is not None else ans_agent_adapter(protocol=protocol, target=target)
         self.timeout = timeout
         self._transport = transport
         self._label = label or self.ans_url
@@ -136,7 +150,11 @@ class AnsV2Resolver:
         return self._label
 
     async def resolve(self, agent_id: str) -> tuple[Status, RecordView | None]:
-        ans_id = self.ansname_for(agent_id)
+        """Never raises."""
+        try:
+            ans_id = self.ansname_for(agent_id)
+        except Exception:
+            return "error", None
         async with httpx.AsyncClient(transport=self._transport) as client:
             return await fetch_view(
                 client,

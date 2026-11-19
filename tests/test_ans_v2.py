@@ -35,14 +35,52 @@ async def test_resolve_success() -> None:
 
 
 @pytest.mark.asyncio
-async def test_404_is_absent() -> None:
-    assert await _resolver(_one_hop(httpx.Response(404))).resolve("x") == ("absent", None)
+async def test_404_is_no_claim_by_default() -> None:
+    # On a route that answers 404 for a record the caller may not see, "not
+    # found" is not a claim of absence. The default never turns it into one.
+    assert await _resolver(_one_hop(httpx.Response(404))).resolve("x") == ("error", None)
 
 
 @pytest.mark.asyncio
-async def test_soft_404_is_absent() -> None:
+async def test_404_is_absent_where_the_route_says_it_means_that() -> None:
+    resolver = _resolver(_one_hop(httpx.Response(404)), not_found_is_absent=True)
+    assert await resolver.resolve("x") == ("absent", None)
+
+
+@pytest.mark.asyncio
+async def test_soft_404_follows_the_same_switch() -> None:
     handler = _one_hop(httpx.Response(200, json={"success": False, "error": "agent not found"}))
-    assert await _resolver(handler).resolve("x") == ("absent", None)
+    assert await _resolver(handler).resolve("x") == ("error", None)
+    assert await _resolver(handler, not_found_is_absent=True).resolve("x") == ("absent", None)
+
+
+@pytest.mark.asyncio
+async def test_default_adapter_reads_the_endpoints_list() -> None:
+    record = {
+        "endpoints": [
+            {
+                "protocol": "A2A",
+                "agentUrl": "https://agent.example/a2a",
+                "metaDataUrl": "https://agent.example/card.json",
+            },
+            {"protocol": "MCP", "agentUrl": "https://agent.example/mcp"},
+        ]
+    }
+    handler = _one_hop(httpx.Response(200, json=record))
+    _, view = await _resolver(handler, protocol="a2a").resolve("x")
+    assert view is not None and view.endpoint == "https://agent.example/card.json"
+    _, service = await _resolver(handler, protocol="mcp", target="service").resolve("x")
+    assert service is not None and service.endpoint == "https://agent.example/mcp"
+    # Several protocols registered and none chosen: the entries disagree, so no claim.
+    assert await _resolver(handler).resolve("x") == ("error", None)
+
+
+@pytest.mark.asyncio
+async def test_name_mapping_that_fails_is_not_raised() -> None:
+    def boom(agent_id: str) -> str:
+        raise KeyError(agent_id)
+
+    assert await _resolver(_one_hop(httpx.Response(200, json={})), ansname_for=boom).resolve("x") == ("error", None)
 
 
 @pytest.mark.asyncio
