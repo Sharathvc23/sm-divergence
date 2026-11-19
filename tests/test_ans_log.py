@@ -119,10 +119,18 @@ def by_id(doc: Any = None, *, status_code: int = 200, **kw: Any) -> AnsLogResolv
     return AnsLogResolver(LOG, transport=serve(response), **kw)
 
 
-def badge_zone(*values: str, rcode: Any = "NOERROR") -> Any:
+def badge_zone(*values: str, rcode: Any = "NOERROR", label: str = "_ans-badge", asked: list[str] | None = None) -> Any:
+    """A zone whose badge row lives under ``label``; the other label does not exist."""
+
     async def query(name: str, rdtype: str) -> DnsAnswer:
-        assert (name, rdtype) == (f"_ans-badge.{FQDN}.", "TXT")
-        return DnsAnswer(rcode=rcode, txt=values)
+        assert rdtype == "TXT" and name in (f"_ans-badge.{FQDN}.", f"_ra-badge.{FQDN}.")
+        if asked is not None:
+            asked.append(name)
+        if rcode != "NOERROR":
+            return DnsAnswer(rcode=rcode)
+        if name != f"{label}.{FQDN}.":
+            return DnsAnswer(rcode="NXDOMAIN")
+        return DnsAnswer(txt=values)
 
     return query
 
@@ -436,6 +444,58 @@ async def test_an_id_that_is_not_a_dns_name_cannot_be_located() -> None:
 )
 def test_split_badge_url(url: str, expected: tuple[str, str] | None) -> None:
     assert split_badge_url(url) == expected
+
+
+@pytest.mark.asyncio
+async def test_badge_row_under_the_other_owner_label_is_read() -> None:
+    asked: list[str] = []
+    row = f"v=ra-badge1; url={LOG}/v1/agents/{AGENT_ID}"
+    resolver = AnsLogResolver(
+        LOG,
+        badge_query=badge_zone(row, label="_ra-badge", asked=asked),
+        transport=serve(httpx.Response(200, json=badge())),
+    )
+    assert (await outcome_of(resolver))[0] == "present"
+    assert asked == [f"_ans-badge.{FQDN}.", f"_ra-badge.{FQDN}."]
+
+
+@pytest.mark.asyncio
+async def test_a_version_tag_belongs_to_its_own_owner_label() -> None:
+    # The tag of one label published under the other is not a badge row.
+    row = f"v=ans-badge1; url={LOG}/v1/agents/{AGENT_ID}"
+    resolver = AnsLogResolver(
+        LOG, badge_query=badge_zone(row, label="_ra-badge"), transport=serve(httpx.Response(200, json=badge()))
+    )
+    assert await outcome_of(resolver) == ("error", None, OUTCOME_NO_BADGE)
+
+
+@pytest.mark.asyncio
+async def test_first_label_that_holds_a_badge_row_is_used() -> None:
+    asked: list[str] = []
+    resolver = AnsLogResolver(
+        LOG, badge_query=badge_zone(BADGE_TXT, asked=asked), transport=serve(httpx.Response(200, json=badge()))
+    )
+    assert (await outcome_of(resolver))[0] == "present"
+    assert asked == [f"_ans-badge.{FQDN}."]
+
+
+@pytest.mark.asyncio
+async def test_attested_records_published_as_a_name_to_value_map() -> None:
+    doc = badge(records=[])
+    doc["payload"]["producer"]["event"]["attestations"]["dnsRecordsProvisioned"] = {
+        f"_ans.{FQDN}": "v=ans1; version=0.0.1; url=https://agent.example.com/agent-card.json",
+        f"_ra-badge.{FQDN}": f"v=ra-badge1; url={LOG}/v1/agents/{AGENT_ID}",
+    }
+    status, view, _ = await outcome_of(by_id(doc))
+    assert status == "present"
+    assert view == RecordView(endpoint="https://agent.example.com/agent-card.json")
+
+
+@pytest.mark.asyncio
+async def test_attested_records_of_another_shape_are_unparseable() -> None:
+    doc = badge(records=[])
+    doc["payload"]["producer"]["event"]["attestations"]["dnsRecordsProvisioned"] = "v=ans1; url=https://x.example/"
+    assert await outcome_of(by_id(doc)) == ("error", None, OUTCOME_UNPARSEABLE)
 
 
 # --- sweep-level: a log beside the zone it attests ----------------------------

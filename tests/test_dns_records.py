@@ -37,6 +37,7 @@ from sm_divergence.discovery import (
     DnsAnswer,
     DnsSvcbResolver,
     DnsTxtResolver,
+    DnsZoneResolver,
     RecordView,
     SvcbRow,
     SvcParamKeyMap,
@@ -594,6 +595,73 @@ def test_parse_ans_txt() -> None:
     }
     assert parse_ans_txt("just some text") == {}
     assert parse_ans_txt("") == {}
+
+
+# --- one zone, either record shape --------------------------------------------
+
+
+def zone_resolver(zone: Zone, asked: list[tuple[str, str]] | None = None, **kw: Any) -> DnsZoneResolver:
+    return DnsZoneResolver(query=zone_query(zone, asked), **kw)
+
+
+@pytest.mark.asyncio
+async def test_zone_resolver_reads_svcb_and_asks_nothing_else() -> None:
+    asked: list[tuple[str, str]] = []
+    zone = {**at(FQDN, svcb(R1)), **at(TXT_OWNER, txt(T_A2A), "TXT")}
+    status, view, _ = await outcome_of(zone_resolver(zone, asked))
+    assert status == "present" and view is not None and view.endpoint == CARD
+    assert asked == [("agent.example.com.", "SVCB")]
+
+
+@pytest.mark.asyncio
+async def test_zone_resolver_falls_back_to_txt_when_no_svcb_row_exists() -> None:
+    asked: list[tuple[str, str]] = []
+    zone = {**at(FQDN, DnsAnswer()), **at(TXT_OWNER, txt(T_A2A), "TXT")}  # the name exists, with no SVCB
+    status, view, _ = await outcome_of(zone_resolver(zone, asked))
+    assert status == "present" and view == RecordView(endpoint="https://agent.example.com/a2a")
+    assert asked == [("agent.example.com.", "SVCB"), ("_ans.agent.example.com.", "TXT")]
+
+
+@pytest.mark.asyncio
+async def test_zone_resolver_is_absent_only_when_both_shapes_are() -> None:
+    assert await outcome_of(zone_resolver({})) == ("absent", None, "absent")
+
+
+@pytest.mark.asyncio
+async def test_zone_resolver_does_not_fall_back_from_an_error() -> None:
+    asked: list[tuple[str, str]] = []
+    zone = {
+        **at(FQDN, svcb('1 . mandatory=key65300 alpn="h2" key65300="x"')),
+        **at(TXT_OWNER, txt(T_A2A), "TXT"),
+    }
+    # Falling through to the TXT row would hide rows that could not be read.
+    assert await outcome_of(zone_resolver(zone, asked)) == ("error", None, OUTCOME_UNPARSEABLE)
+    assert asked == [("agent.example.com.", "SVCB")]
+    assert await outcome_of(zone_resolver(at(FQDN, DnsAnswer(rcode="SERVFAIL")))) == (
+        "error",
+        None,
+        OUTCOME_UNREACHABLE,
+    )
+
+
+@pytest.mark.asyncio
+async def test_zone_resolver_passes_its_arguments_to_both_shapes() -> None:
+    zone = {**at(FQDN, DnsAnswer()), **at(TXT_OWNER, txt(T_A2A, T_MCP), "TXT")}
+    _, view, _ = await outcome_of(zone_resolver(zone, protocol="mcp", target="service", label="zone", vantage="v1"))
+    assert view is not None and view.endpoint == "https://agent.example.com/mcp"
+    resolver = zone_resolver({}, label="zone", vantage="v1")
+    assert (resolver.label, resolver.vantage) == ("zone", "v1")
+    assert zone_resolver({}).label == "dns-zone"
+    unsigned = zone_resolver({**at(FQDN, DnsAnswer()), **at(TXT_OWNER, txt(T_A2A), "TXT")}, require_dnssec=True)
+    assert await outcome_of(unsigned) == ("error", None, OUTCOME_UNVERIFIABLE)
+
+
+@pytest.mark.asyncio
+async def test_a_zone_using_one_shape_is_not_an_omission_beside_a_registry() -> None:
+    zone = zone_resolver({**at(FQDN, DnsAnswer()), **at(TXT_OWNER, txt(T_A2A), "TXT")})
+    registry = _Fixed("registry", RecordView(endpoint="https://agent.example.com/a2a"))
+    results = await Corroborator([zone, registry]).check([FQDN])
+    assert all_findings(results) == []
 
 
 # --- sweep-level: a zone beside a registry ------------------------------------

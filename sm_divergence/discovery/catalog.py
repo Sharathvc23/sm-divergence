@@ -69,6 +69,9 @@ OUTCOME_NO_CATALOG = "ai.stellarminds.catalog.no-catalog"
 # The subject was not found, but part of the listing lives in a nested catalog
 # this resolver did not read, so absence cannot be claimed.
 OUTCOME_NESTED_NOT_READ = "ai.stellarminds.catalog.nested-not-read"
+# The catalog path answered with a redirect, and redirects were not being
+# followed: the origin asked did not itself serve a catalog.
+OUTCOME_REDIRECTED = "ai.stellarminds.catalog.redirected"
 # Several candidate entries reduce to different views.
 OUTCOME_AMBIGUOUS_ENTRY = "ai.stellarminds.catalog.ambiguous-entry"
 
@@ -159,7 +162,10 @@ class CatalogResolver:
     the first that is served is the catalog (default: the well-known path).
     ``identifier_for`` maps the watch id to the entry identifier;
     ``artifact_type`` keeps candidates of one media type. ``follow_nested``
-    reads nested catalogs referenced by ``url``. ``transport`` is an injectable
+    reads nested catalogs referenced by ``url``. ``follow_redirects`` follows
+    HTTP redirects (an apex that redirects to ``www``, say); off by default, so
+    the claim is the asked origin's own, and a redirect is then ``error`` with
+    outcome ``ai.stellarminds.catalog.redirected``. ``transport`` is an injectable
     httpx transport for tests. ``vantage`` is the observation context; run two
     instances with the same ``label`` and different vantages to detect a
     publisher that serves different catalogs by context.
@@ -173,6 +179,7 @@ class CatalogResolver:
         artifact_type: str | None = None,
         catalog_paths: Sequence[str] = (WELL_KNOWN_CATALOG_PATH,),
         follow_nested: bool = False,
+        follow_redirects: bool = False,
         max_depth: int = 4,
         max_documents: int = 16,
         timeout: float = 10.0,
@@ -185,6 +192,7 @@ class CatalogResolver:
         self.artifact_type = artifact_type
         self.catalog_paths = tuple(catalog_paths) or (WELL_KNOWN_CATALOG_PATH,)
         self.follow_nested = follow_nested
+        self.follow_redirects = follow_redirects
         self.max_depth = max(1, int(max_depth))
         self.max_documents = max(1, int(max_documents))
         self.timeout = timeout
@@ -240,7 +248,10 @@ class CatalogResolver:
         """One catalog document, or ``(None, outcome)``."""
         try:
             resp = await client.get(
-                url, headers={"Accept": f"{CATALOG_MEDIA_TYPE}, application/json"}, timeout=self.timeout
+                url,
+                headers={"Accept": f"{CATALOG_MEDIA_TYPE}, application/json"},
+                timeout=self.timeout,
+                follow_redirects=self.follow_redirects,
             )
         except httpx.TimeoutException:
             return None, OUTCOME_TIMEOUT
@@ -248,6 +259,8 @@ class CatalogResolver:
             return None, OUTCOME_UNREACHABLE
         if resp.status_code == 404:
             return None, OUTCOME_NO_CATALOG
+        if 300 <= resp.status_code < 400:
+            return None, OUTCOME_REDIRECTED
         if resp.status_code in (401, 403):
             return None, OUTCOME_REFUSED
         if resp.status_code != 200:

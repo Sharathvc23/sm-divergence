@@ -14,8 +14,8 @@ from what was registered — then surface as an ordinary divergence.
 
 **Which entry to ask for.** The log files an agent under its own ``agentId``.
 Either the caller supplies the mapping (``agent_id_for``), or the resolver reads
-the ``v=ans-badge1`` TXT row at ``_ans-badge.{fqdn}``, which names the log and
-the entry. A badge row that names a log other than the one configured is
+the badge TXT row at the FQDN (``v=ans-badge1`` at ``_ans-badge.{fqdn}``, or
+``v=ra-badge1`` at ``_ra-badge.{fqdn}``), which names the log and the entry. A badge row that names a log other than the one configured is
 ``error``/``unverifiable``: provenance from another log is not a claim by this
 one. No badge row is ``error`` too — the log was never asked, so it claimed
 nothing.
@@ -29,17 +29,31 @@ compare.
 host is not the expected FQDN is ``error``/``unverifiable`` — a source must not
 dress one agent's record as another's.
 
-**What is not verified.** The badge's signatures, its inclusion proof and the
-log's receipt are not checked here. The view is the log's claim, compared like
-any registry's unsigned ``endpoint``; it carries no ``did``.
+**Verified or not.** Without ``root_keys`` the badge is read as served: the
+view is the log's unsigned claim, compared like any registry's ``endpoint``.
+With ``root_keys`` — the log's verification keys, pinned by the caller — nothing
+unsigned is used. The event is taken from the log's receipt, whose signature and
+inclusion proof must verify (``log_receipt.verify_receipt``) and whose event
+must be the entry asked for; the status is taken from the log's status token,
+which must verify, name that entry and be current. Any failure is
+``error``/``unverifiable``, including a log that serves no status token: a
+sealed event with no proven status is not a claim about the present.
 
-Needs the ``dns`` extra: attested records are zone-file text.
+A verified claim shows the log's key signed it. It does not show the receipt's
+root to be the log's current one, nor that no later event supersedes the one
+sealed; and keys fetched from the log being read prove only that the log is
+self-consistent. The view carries no ``did`` either way.
+
+Needs the ``dns`` extra (attested records are zone-file text), and the ``cose``
+extra when ``root_keys`` is given.
 """
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Callable, Sequence
+import time
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, Literal
 
 import httpx
@@ -71,13 +85,19 @@ from .dns_records import (
     txt_rows_from_text,
 )
 from .known_subject import OUTCOME_EXPIRED, OUTCOME_REVOKED
+from .log_receipt import ReceiptError, parse_root_keys, verify_receipt, verify_status_token
 from .views import RecordView, normalize_endpoint
 
 AgentIdFn = Callable[[str], str]
 
 BADGE_PATH = "/v1/agents/{id}"
-BADGE_TXT_PREFIX = "_ans-badge."
-BADGE_TXT_VERSION = "ans-badge1"
+RECEIPT_PATH = "/v1/agents/{id}/receipt"
+STATUS_TOKEN_PATH = "/v1/agents/{id}/status-token"
+RECEIPT_MEDIA_TYPE = "application/scitt-receipt+cose"
+STATUS_TOKEN_MEDIA_TYPE = "application/ans-status-token+cbor"
+# The badge row has been published under two owner labels, each with its own
+# version tag. Both are read, in this order.
+BADGE_TXT_ROWS: tuple[tuple[str, str], ...] = (("_ans-badge.", "ans-badge1"), ("_ra-badge.", "ra-badge1"))
 
 # The zone names no log entry for the subject, so the log could not be asked.
 OUTCOME_NO_BADGE = "ai.stellarminds.ans.no-badge"
@@ -105,14 +125,31 @@ def _zone_text(data: str, rdtype: str) -> str:
     return data
 
 
+def _attested_records(records: Any) -> list[tuple[str, str, str]]:
+    """The attested DNS records as ``(name, type, data)``. Raises if unreadable.
+
+    Two shapes are published: a list of ``{name, type, data}`` objects, and a
+    map from owner name to value, whose entries are TXT records.
+    """
+    if records is None:
+        return []
+    if isinstance(records, dict):
+        return [(str(name), "TXT", str(value)) for name, value in records.items()]
+    if isinstance(records, list):
+        return [(str(r["name"]), str(r["type"]).upper(), str(r["data"])) for r in records]
+    raise ValueError("dnsRecordsProvisioned is neither a list nor a map")
+
+
 class AnsLogResolver:
     """Resolve a canonical id through one transparency log's public badge route.
 
     ``log_url`` is the log's base URL. ``agent_id_for`` maps the canonical watch
     id to the log's ``agentId``; when it is ``None`` the entry is located through
-    the ``_ans-badge`` TXT row at the FQDN ``owner_for`` returns. ``protocol``,
+    the badge TXT row at the FQDN ``owner_for`` returns. ``protocol``,
     ``target`` and ``key_map`` are as for ``DnsSvcbResolver`` and are applied to
-    the records the log attests. ``badge_query`` replaces the DNS lookup of the
+    the records the log attests. ``root_keys`` turns on verification: the
+    log's keys, as ``log_receipt.parse_root_keys`` accepts them. ``clock`` and
+    ``leeway`` govern the status token's validity window. ``badge_query`` replaces the DNS lookup of the
     badge row, and ``transport`` the HTTP path, for tests. ``vantage`` is the
     observation context; run two instances with the same ``label`` and different
     vantages to detect a log that answers differently by context.
@@ -127,7 +164,12 @@ class AnsLogResolver:
         protocol: str | None = None,
         target: Literal["descriptor", "service"] = "descriptor",
         key_map: SvcParamKeyMap = DEFAULT_KEY_MAP,
+        root_keys: Mapping[str, Any] | str | Iterable[str] | None = None,
         badge_path: str = BADGE_PATH,
+        receipt_path: str = RECEIPT_PATH,
+        status_token_path: str = STATUS_TOKEN_PATH,
+        clock: Callable[[], float] = time.time,
+        leeway: float = 60.0,
         badge_query: DnsQuery | None = None,
         nameservers: Sequence[str] | None = None,
         timeout: float = 10.0,
@@ -143,6 +185,15 @@ class AnsLogResolver:
         self.target = target
         self.key_map = key_map
         self.badge_path = badge_path
+        self.receipt_path = receipt_path
+        self.status_token_path = status_token_path
+        self.clock = clock
+        self.leeway = leeway
+        # Unusable keys are a configuration error, raised here rather than
+        # reported as a claim on every resolve.
+        self._keys: Mapping[str, Any] | None = None
+        if root_keys is not None:
+            self._keys = root_keys if isinstance(root_keys, Mapping) else parse_root_keys(root_keys)
         self.timeout = timeout
         self._transport = transport
         self._label = label or self.log_url
@@ -189,36 +240,68 @@ class AnsLogResolver:
 
         try:
             async with httpx.AsyncClient(transport=self._transport) as client:
-                resp = await client.get(
-                    self.log_url + self.badge_path.replace("{id}", entry),
-                    headers={"Accept": "application/json"},
-                    timeout=self.timeout,
-                )
+                if self._keys is not None:
+                    return await self._verified_claim(client, entry, expected_host, self._keys)
+                resp, status, outcome = await self._get(client, self.badge_path, entry, "application/json")
+                if resp is None:
+                    return status, None, outcome
+                badge = resp.json()
+                if not isinstance(badge, dict):
+                    return "error", None, OUTCOME_UNPARSEABLE
+                return self._claim(badge.get("status"), badge["payload"]["producer"]["event"], expected_host)
+        except Exception:
+            # An answer this adapter cannot read is not a claim of absence.
+            return "error", None, OUTCOME_UNPARSEABLE
+
+    async def _get(
+        self, client: httpx.AsyncClient, path: str, entry: str, accept: str
+    ) -> tuple[httpx.Response | None, Status, str]:
+        """One GET against the log, classified. The response is returned only on ``200``."""
+        try:
+            resp = await client.get(
+                self.log_url + path.replace("{id}", entry), headers={"Accept": accept}, timeout=self.timeout
+            )
         except httpx.TimeoutException:
-            return "error", None, OUTCOME_TIMEOUT
+            return None, "error", OUTCOME_TIMEOUT
         except Exception:
-            return "error", None, OUTCOME_UNREACHABLE
-
+            return None, "error", OUTCOME_UNREACHABLE
         if resp.status_code == 404:
-            return "absent", None, "absent"
+            return None, "absent", "absent"
         if resp.status_code in (401, 403):
-            return "error", None, OUTCOME_REFUSED
+            return None, "error", OUTCOME_REFUSED
         if resp.status_code != 200:
-            return "error", None, OUTCOME_UNREACHABLE
-        try:
-            badge = resp.json()
-        except Exception:
-            return "error", None, OUTCOME_UNPARSEABLE
-        try:
-            return self._claim(badge, expected_host)
-        except Exception:
-            # A badge this adapter cannot read is not a claim of absence.
-            return "error", None, OUTCOME_UNPARSEABLE
+            return None, "error", OUTCOME_UNREACHABLE
+        return resp, "present", "present"
 
-    def _claim(self, badge: Any, expected_host: str | None) -> tuple[Status, RecordView | None, str]:
-        if not isinstance(badge, dict):
-            return "error", None, OUTCOME_UNPARSEABLE
-        status = badge.get("status")
+    async def _verified_claim(
+        self, client: httpx.AsyncClient, entry: str, expected_host: str | None, keys: Mapping[str, Any]
+    ) -> tuple[Status, RecordView | None, str]:
+        """The claim read from signed artifacts only: the receipt and the status token."""
+        resp, status, outcome = await self._get(client, self.receipt_path, entry, RECEIPT_MEDIA_TYPE)
+        if resp is None:
+            return status, None, outcome
+        try:
+            receipt = verify_receipt(resp.content, keys)
+        except ReceiptError:
+            return "error", None, OUTCOME_UNVERIFIABLE
+        event = json.loads(receipt.payload)["payload"]["producer"]["event"]
+        # A valid receipt for another agent's event is not this agent's record.
+        if str(event.get("ansId")) != entry:
+            return "error", None, OUTCOME_UNVERIFIABLE
+
+        resp, status, outcome = await self._get(client, self.status_token_path, entry, STATUS_TOKEN_MEDIA_TYPE)
+        if resp is None:
+            # The sealed event is proven but its current status is not.
+            return "error", None, OUTCOME_UNVERIFIABLE if status == "absent" else outcome
+        try:
+            token = verify_status_token(resp.content, keys, now=self.clock(), leeway=self.leeway)
+        except ReceiptError:
+            return "error", None, OUTCOME_UNVERIFIABLE
+        if token.agent_id != entry:
+            return "error", None, OUTCOME_UNVERIFIABLE
+        return self._claim(token.status, event, expected_host)
+
+    def _claim(self, status: Any, event: Any, expected_host: str | None) -> tuple[Status, RecordView | None, str]:
         if status == "REVOKED":
             return "error", None, OUTCOME_REVOKED
         if status == "EXPIRED":
@@ -226,7 +309,6 @@ class AnsLogResolver:
         if status not in _LIVE_STATUSES:
             return "error", None, OUTCOME_UNPARSEABLE
 
-        event = badge["payload"]["producer"]["event"]
         host = normalize_owner(event["agent"]["host"])
         if host is None:
             return "error", None, OUTCOME_UNPARSEABLE
@@ -234,16 +316,14 @@ class AnsLogResolver:
             return "error", None, OUTCOME_UNVERIFIABLE
 
         attestations = event.get("attestations") or {}
-        records = attestations.get("dnsRecordsProvisioned") or []
         svcb: list[str] = []
         txt: list[str] = []
-        for record in records:
-            name = normalize_owner(str(record["name"]))
-            rdtype = str(record["type"]).upper()
-            if rdtype == "SVCB" and name == host:
-                svcb.append(str(record["data"]))
-            elif rdtype == "TXT" and name == ANS_TXT_PREFIX + host:
-                txt.append(_zone_text(str(record["data"]), rdtype))
+        for name, rdtype, data in _attested_records(attestations.get("dnsRecordsProvisioned")):
+            owner = normalize_owner(name)
+            if rdtype == "SVCB" and owner == host:
+                svcb.append(data)
+            elif rdtype == "TXT" and owner == ANS_TXT_PREFIX + host:
+                txt.append(_zone_text(data, rdtype))
 
         if svcb:
             claim = reduce_svcb_rows(
@@ -292,18 +372,23 @@ class _BadgeLocator(_DnsResolverBase):
         )
 
     async def locate(self, owner: str) -> tuple[tuple[str, str] | None, str]:
-        answer, status, outcome = await self._ask(BADGE_TXT_PREFIX + owner, "TXT")
-        if answer is None:
-            return None, OUTCOME_NO_BADGE if status == "absent" else outcome
         found: set[tuple[str, str]] = set()
-        for value in answer.txt:
-            fields = parse_ans_txt(value)
-            if fields.get("v", "").lower() != BADGE_TXT_VERSION:
-                continue
-            split = split_badge_url(fields.get("url", ""))
-            if split is None:
-                return None, OUTCOME_UNPARSEABLE
-            found.add(split)
+        for prefix, version in BADGE_TXT_ROWS:
+            answer, status, outcome = await self._ask(prefix + owner, "TXT")
+            if answer is None:
+                if status == "absent":
+                    continue
+                return None, outcome
+            for value in answer.txt:
+                fields = parse_ans_txt(value)
+                if fields.get("v", "").lower() != version:
+                    continue
+                split = split_badge_url(fields.get("url", ""))
+                if split is None:
+                    return None, OUTCOME_UNPARSEABLE
+                found.add(split)
+            if found:
+                break
         if not found:
             return None, OUTCOME_NO_BADGE
         if len(found) > 1:

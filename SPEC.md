@@ -263,7 +263,15 @@ and withhold its superseded target from the field comparison.
   resolver performs no HTTP request: it does not fetch the descriptor, does not
   check a digest against content, and does not read TLSA. A zone answering
   differently by recursive resolver is observed by running the source from more
-  than one vantage (§5.2).
+  than one vantage (§5.2). A recursive resolver MAY be reached by DNS over HTTPS
+  (`RFC 8484`, wire format); the classification above is unchanged, with an
+  HTTP status other than `200` treated as a transport failure.
+- **DNS zone resolver** — one zone as one source, whichever record shape it
+  uses: the DNS SVCB resolver first, and the DNS TXT resolver only when that is
+  `absent`. An SVCB result that is `error` is returned as it is and the TXT
+  shape is not consulted: falling through would hide rows that could not be
+  read. Asking the two shapes as two sources instead would report a zone that
+  uses one of them as an `omission` by the other.
 - **DNS TXT resolver** — the `v=ans1` TXT rows at `_ans.{fqdn}`, one row per
   agent protocol (`v=ans1; version=…; p={protocol}; mode=…; url={endpoint}`).
   Query-name and response classification are as for the SVCB resolver. The
@@ -278,8 +286,12 @@ and withhold its superseded target from the field comparison.
   latest sealed event for the agent, and that event attests the DNS records the
   agent's zone held when it was sealed.
   1. The canonical id maps to the log's `agentId` via a caller-supplied
-     `agent_id_for`, or — when none is given — through the `v=ans-badge1` TXT row
-     at `_ans-badge.{fqdn}`, whose `url` is `{log}/v1/agents/{agentId}`. A row
+     `agent_id_for`, or — when none is given — through the badge TXT row at the
+     FQDN, whose `url` is `{log}/v1/agents/{agentId}`. The row is published as
+     `v=ans-badge1` at `_ans-badge.{fqdn}` or as `v=ra-badge1` at
+     `_ra-badge.{fqdn}`; the owner labels are queried in that order and the
+     first that holds a badge row is used. A version tag counts only under its
+     own owner label. A row
      naming a log other than the one configured → `error`/`unverifiable`:
      provenance from another log is not a claim by this one. No such row
      (including `NXDOMAIN`) → `error` with outcome
@@ -296,16 +308,40 @@ and withhold its superseded target from the field comparison.
   4. When the expected FQDN is known (an `owner_for` is configured, or the entry
      was located through the badge row), an entry whose attested host differs →
      `error`/`unverifiable`.
-  5. The view is reduced from `attestations.dnsRecordsProvisioned`: the SVCB rows
+  5. The view is reduced from `attestations.dnsRecordsProvisioned`, published
+     either as a list of `{name, type, data}` objects or as a map from owner
+     name to value (whose entries are TXT records): the SVCB rows
      at the attested host by steps 4–7 of the DNS SVCB resolver (no AliasMode row
      is followed); else the `v=ans1` TXT rows at `_ans.{host}` by the DNS TXT
      resolver's rules; else an empty view — a live registration with nothing to
      compare. If the reduced view carries no `digest`, it is taken from
      `attestations.metadataHashes` for the configured protocol, or from its only
      entry when no protocol is configured.
-  The resolver does not verify the badge's signatures, its inclusion proof, or
-  the log's receipt; the view is the log's claim, compared like any registry's
-  unsigned `endpoint`, and carries no `did`.
+  6. **Verification.** Without verification keys the badge is read as served:
+     the view is the log's unsigned claim, compared like any registry's
+     `endpoint`. With verification keys configured, nothing unsigned is used and
+     the badge route is not requested:
+     - `GET {log}/v1/agents/{agentId}/receipt` MUST verify as a receipt under a
+       configured key: a COSE_Sign1 with algorithm ES256, an attached payload,
+       and an inclusion proof under which `SHA-256(0x00 || payload)` walks to
+       the stated root (`RFC 9162` §2.1.3.2). The event is the one sealed in that
+       payload, and its `ansId` MUST equal the `agentId` asked for.
+     - `GET {log}/v1/agents/{agentId}/status-token` MUST verify as a COSE_Sign1
+       under a configured key, name that `agentId`, and be current: not issued
+       in the future and not expired, each within a configured leeway. The
+       status is the one it states.
+     - A `404` on the receipt route → `absent`. Any verification failure, and a
+       `404` on the status-token route, → `error`/`unverifiable`: a sealed event
+       with no proven status is not a claim about the present. Other responses
+       keep their classification from step 2.
+     Steps 3–5 then apply to the verified status and event. A key is trusted
+     only by its `kid`, the first four bytes of `SHA-256(SPKI DER)`; a key line
+     whose stated key hash is not its key's MUST be rejected.
+  Verification shows that a configured key signed the event and its status. It
+  does not show the receipt's root to be the log's current one, nor that no
+  later event supersedes the one sealed; and keys obtained from the log being
+  read establish only that the log is self-consistent. The view carries no
+  `did` in either mode.
 - **Catalog resolver** — a publisher's AI Catalog document as a source. The
   configured paths are tried in order (default `/.well-known/ai-catalog.json`)
   and the first that is served is the catalog; a document is a catalog when it
@@ -313,7 +349,10 @@ and withhold its superseded target from the field comparison.
   1. `404` at every configured path → `error` with outcome
      `ai.stellarminds.catalog.no-catalog`: the publisher made no claim. `401`/`403`
      → `error`/`refused`; another non-`200` or a transport failure →
-     `error`/`unreachable` (the remaining paths are not tried); a timeout →
+     `error`/`unreachable` (the remaining paths are not tried); a redirect, when
+     redirects are not being followed (the default), → `error` with outcome
+     `ai.stellarminds.catalog.redirected`: the origin asked did not itself serve
+     a catalog; a timeout →
      `error`/`timeout`; a body that is not a catalog → `error`/`unparseable`.
   2. The canonical id maps to an entry `identifier` via a caller-supplied
      `identifier_for`; identifiers are compared exactly. Entries are searched in

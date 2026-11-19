@@ -49,11 +49,40 @@ A DNS zone becomes a source. No kernel change; `sm-resolver` 0.7 is unchanged.
   one media type. No catalog (`ai.stellarminds.catalog.no-catalog`), a listing
   not read in full (`…nested-not-read`) and candidates that disagree
   (`…ambiguous-entry`) are `error` claims, never `absent`.
+- **Verified mode for `AnsLogResolver`** (`root_keys=`). The event is read from
+  the log's receipt and the status from its status token, both COSE_Sign1 under
+  the caller's pinned keys; the unsigned badge route is not requested. A receipt
+  for another agent's event, a token for another agent, an expired token, an
+  untrusted key and a missing status token are all `error`/`unverifiable`.
+- **`discovery/log_receipt.py`** — `verify_receipt` (ES256 signature and RFC 9162
+  inclusion proof), `verify_status_token`, `parse_root_keys`. Checked against an
+  independent recursive construction of the Merkle tree for every leaf of every
+  tree size up to 69.
+- **`cose` extra** (`cbor2`, `cryptography`) and **`ans` extra** (`cose` plus
+  `dns`), both imported on first use only.
+- **`DnsZoneResolver`** — one zone as one source: SVCB rows first, the `v=ans1`
+  TXT rows only when no SVCB row exists. It does not fall back from an `error`.
+- **`DohQuery`** — DNS over HTTPS (RFC 8484, wire format) as a `DnsQuery`: for
+  networks that filter UDP port 53, and as an independent second vantage.
+- **`CatalogResolver(follow_redirects=…)`** and the outcome
+  `ai.stellarminds.catalog.redirected`.
+- **`examples/live_sweep.py`** — corroborate one subject across live sources
+  from the command line (not part of the offline example set).
 - **`reduce_svcb_rows` / `reduce_ans_txt`** — the pure row-to-claim reductions,
   shared by the DNS resolvers and the log resolver.
 - **`ans_agent_adapter`** — a `RecordAdapter` for an agent record that lists
   `endpoints[]` (`agentUrl`, `metaDataUrl`, `metaDataHash`, `protocol`).
 - **`fetch_view(not_found=…)`** — what a not-found answer means on a route.
+
+### Fixed
+
+- **`AnsLogResolver` reads the record shapes logs actually publish.** The
+  attested records may be a map from owner name to value as well as a list of
+  `{name, type, data}` objects, and the badge TXT row may be `v=ra-badge1` at
+  `_ra-badge.{fqdn}` as well as `v=ans-badge1` at `_ans-badge.{fqdn}`. Without
+  this, a log publishing the map shape was `unparseable` and a zone publishing
+  the other badge label had no locatable entry.
+- **`CatalogResolver`: a redirect is no longer reported as `unreachable`.**
 
 ### Changed
 
