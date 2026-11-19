@@ -306,6 +306,38 @@ and withhold its superseded target from the field comparison.
   The resolver does not verify the badge's signatures, its inclusion proof, or
   the log's receipt; the view is the log's claim, compared like any registry's
   unsigned `endpoint`, and carries no `did`.
+- **Catalog resolver** — a publisher's AI Catalog document as a source. The
+  configured paths are tried in order (default `/.well-known/ai-catalog.json`)
+  and the first that is served is the catalog; a document is a catalog when it
+  is a JSON object with a string `specVersion` and an array `entries`.
+  1. `404` at every configured path → `error` with outcome
+     `ai.stellarminds.catalog.no-catalog`: the publisher made no claim. `401`/`403`
+     → `error`/`refused`; another non-`200` or a transport failure →
+     `error`/`unreachable` (the remaining paths are not tried); a timeout →
+     `error`/`timeout`; a body that is not a catalog → `error`/`unparseable`.
+  2. The canonical id maps to an entry `identifier` via a caller-supplied
+     `identifier_for`; identifiers are compared exactly. Entries are searched in
+     the root and in every nested catalog carried inline, to a depth bound
+     (default 4). A nested catalog referenced by `url` is read only when
+     `follow_nested` is set, within the depth bound and a document bound, and
+     never the same document twice.
+  3. No matching entry → `absent`, but only if the listing was read in full. If
+     any nested catalog was not read (not followed, beyond a bound, or
+     unreadable) → `error` with outcome `ai.stellarminds.catalog.nested-not-read`.
+  4. Of several entries for one identifier the latest is taken: by `version`
+     when every one is `major.minor.patch`, else by `updatedAt` when every one
+     carries an offset timestamp; otherwise all are kept. A matched entry that is
+     itself a nested catalog contributes its children as candidates. With an
+     `artifact_type` configured, only candidates whose `type` (or the earlier
+     member name `mediaType`) equals it are kept; no candidate kept → `absent`.
+  5. A candidate MUST carry exactly one of `url` and `data`. `url` → `endpoint`;
+     `digest` → `digest`; an entry carrying `data` contributes `endpoint = null`.
+     Candidates whose views differ → `error` with outcome
+     `ai.stellarminds.catalog.ambiguous-entry`. A malformed candidate →
+     `error`/`unparseable`; a malformed entry for another identifier is ignored,
+     as are unknown members.
+  The resolver never fetches an artifact and never checks a digest against
+  content. No `did` and no lease position.
 - **By-id resolver, `404` on a credentialed route.** Where a by-id route requires
   a credential and answers `404` both for an agent that does not exist and for
   one the caller may not see, a `404` is not a claim of absence and MUST be
