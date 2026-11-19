@@ -46,16 +46,22 @@ async def fetch_view(
     adapter: RecordAdapter = default_adapter,
     path: str = DEFAULT_PATH,
     timeout: float = 10.0,
+    not_found: Status = "absent",
 ) -> tuple[Status, RecordView | None]:
     """One registry's claim about one id (``present`` / ``absent`` / ``error``).
-    Never raises."""
+    Never raises.
+
+    ``not_found`` is what a ``404`` means on this route. On a public by-id
+    route it is a claim of absence (the default). On a route that also answers
+    ``404`` for a record the caller may not see, it is no claim at all: pass
+    ``"error"``."""
     url = registry_url.rstrip("/") + path.replace("{id}", agent_id)
     try:
         resp = await client.get(url, timeout=timeout)
     except Exception:
         return "error", None
     if resp.status_code == 404:
-        return "absent", None
+        return not_found, None
     if resp.status_code != 200:
         return "error", None
     try:

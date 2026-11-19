@@ -192,6 +192,7 @@ sm-resolver  (dependency)  the source-agnostic kernel — Resolver[T], the View
 sm_divergence/
   discovery/   registry-integrity layer — RecordView + KnownSubjectResolver
                + HttpByIdResolver (NEST) + NandaIndexV2Resolver + AnsV2Resolver
+               + AnsLogResolver (a registration log's public badge)
                + DnsSvcbResolver / DnsTxtResolver (a DNS zone as a source)
   identity/    key-consistency layer — DidView + DidKeyResolver / DidWebResolver
                / UniversalResolverResolver + signed self-description
@@ -243,6 +244,34 @@ plays which role. `require_dnssec=True` turns an answer — or a denial — the
 recursive resolver did not authenticate into an `error`, never an `absent`. The
 adapter makes no HTTP request: it does not fetch the descriptor or check the
 digest against it. Needs the `dns` extra.
+
+**A registration log is a source too.** `AnsLogResolver` reads a transparency
+log's public badge for an agent — no credential — and reduces the DNS records
+that badge attests by the same rules as the DNS resolvers, so the log and the
+live zone are read alike:
+
+```python
+from sm_divergence import AnsLogResolver, DivergenceDetector, DnsSvcbResolver
+
+await DivergenceDetector(
+    [
+        AnsLogResolver("https://log.example", protocol="a2a"),  # located via _ans-badge.{fqdn}
+        DnsSvcbResolver(protocol="a2a"),  # what the zone publishes now
+    ]
+).check(["agent.example.com"])
+```
+
+A zone record changed after it was sealed is an `endpoint` or `digest` finding.
+A revoked or expired registration is an `error` claim with that outcome, never
+an `absent`; so is a name with no badge row, since the log was never asked. The
+badge's signatures and the log's receipt are not verified here. Needs the `dns`
+extra.
+
+`AnsV2Resolver` reads a by-id record route instead. Where that route needs a
+credential and answers `404` for an agent the caller may not see, pass
+`not_found_is_absent=False` so the `404` is no claim rather than a false
+`absent`; `ans_agent_adapter(protocol=…)` reads a record that lists
+`endpoints[]`.
 
 Digests are canonicalized before they are compared (`digest-normalization/0.1`),
 so one SHA-256 served as hex by a registry and as base64url by a zone is not a

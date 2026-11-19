@@ -207,6 +207,111 @@ def _view_key(view: RecordView) -> tuple[tuple[str, str | None], ...]:
     return tuple(sorted(view.comparable().items()))
 
 
+def _speaks(row: SvcbRow, protocol: str, key_map: SvcParamKeyMap) -> bool:
+    key = key_map.agent_protocol
+    declared = row.params.get(key) if key is not None else None
+    if declared is not None:
+        return declared.strip().lower() == protocol
+    return protocol in (alpn.lower() for alpn in row.alpn)
+
+
+def _svcb_view(
+    row: SvcbRow, owner: str, target: Literal["descriptor", "service"], keys: SvcParamKeyMap
+) -> RecordView | None:
+    """Reduce one ServiceMode row to the discovery view; ``None`` if malformed."""
+    host = owner if row.target == "." else normalize_owner(row.target)
+    if host is None:
+        return None
+    path = "/"
+    if keys.path is not None and keys.path in row.params:
+        path = row.params[keys.path]
+        if not path.startswith("/"):
+            return None
+    port = _DEFAULT_PORT if row.port is None else row.port
+    authority = host if port == _DEFAULT_PORT else f"{host}:{port}"
+    service = f"https://{authority}{path}"
+
+    descriptor: str | None = None
+    named = row.params.get(keys.descriptor) if keys.descriptor is not None else None
+    suffix = row.params.get(keys.well_known) if keys.well_known is not None else None
+    if named:
+        descriptor = named
+    elif suffix is not None:
+        if not suffix or any(char in suffix for char in "/?#"):
+            return None
+        descriptor = f"https://{owner}/.well-known/{suffix}"
+
+    digest = row.params.get(keys.descriptor_digest) if keys.descriptor_digest is not None else None
+    return RecordView(endpoint=descriptor if target == "descriptor" else service, digest=digest or None)
+
+
+def reduce_svcb_rows(
+    rows: Sequence[SvcbRow],
+    owner: str,
+    *,
+    protocol: str | None = None,
+    target: Literal["descriptor", "service"] = "descriptor",
+    key_map: SvcParamKeyMap = DEFAULT_KEY_MAP,
+) -> tuple[Status, RecordView | None, str]:
+    """Reduce the ServiceMode rows published at ``owner`` to one claim.
+
+    Pure: no query is made, so AliasMode rows must already have been followed.
+    This is the reduction ``DnsSvcbResolver`` applies to a live answer; another
+    source that carries the same rows (a log attesting what a zone held) applies
+    it too, so both are read by one rule.
+    """
+    # RFC 9460 section 8: a row whose `mandatory` lists a key the client does
+    # not implement is ignored. Rows that existed and were all unreadable are
+    # not a claim of absence.
+    understood = STANDARD_SVC_PARAM_KEYS | key_map.known()
+    usable = [row for row in rows if row.priority != 0 and all(key in understood for key in row.mandatory)]
+    if not usable:
+        return ("error", None, OUTCOME_UNPARSEABLE) if rows else ("absent", None, "absent")
+
+    if protocol is not None:
+        wanted = protocol.lower()
+        usable = [row for row in usable if _speaks(row, wanted, key_map)]
+        if not usable:
+            return "absent", None, "absent"
+
+    best = min(row.priority for row in usable)
+    views: list[RecordView] = []
+    for row in usable:
+        if row.priority != best:
+            continue
+        view = _svcb_view(row, owner, target, key_map)
+        if view is None:
+            return "error", None, OUTCOME_UNPARSEABLE
+        views.append(view)
+    if len({_view_key(view) for view in views}) > 1:
+        return "error", None, OUTCOME_AMBIGUOUS_RRSET
+    return "present", views[0], "present"
+
+
+def reduce_ans_txt(values: Sequence[str], *, protocol: str | None = None) -> tuple[Status, RecordView | None, str]:
+    """Reduce the TXT values published at ``_ans.{fqdn}`` to one claim. Pure."""
+    rows = [fields for fields in map(parse_ans_txt, values) if fields.get("v") == ANS_TXT_VERSION]
+    if protocol is not None:
+        wanted = protocol.lower()
+        rows = [fields for fields in rows if fields.get("p", "").lower() == wanted]
+    if not rows:
+        return "absent", None, "absent"
+
+    views: list[RecordView] = []
+    for fields in rows:
+        url = fields.get("url", "")
+        try:
+            parts = urlsplit(url)
+        except ValueError:
+            return "error", None, OUTCOME_UNPARSEABLE
+        if parts.scheme.lower() not in ("http", "https") or not parts.netloc:
+            return "error", None, OUTCOME_UNPARSEABLE
+        views.append(RecordView(endpoint=url))
+    if len({_view_key(view) for view in views}) > 1:
+        return "error", None, OUTCOME_AMBIGUOUS_RRSET
+    return "present", views[0], "present"
+
+
 class _DnsResolverBase:
     def __init__(
         self,
@@ -344,69 +449,7 @@ class DnsSvcbResolver(_DnsResolverBase):
             hops += 1
             owner = alias
 
-        # RFC 9460 section 8: a row whose `mandatory` lists a key the client does
-        # not implement is ignored. Rows that existed and were all unreadable are
-        # not a claim of absence.
-        understood = STANDARD_SVC_PARAM_KEYS | self.key_map.known()
-        usable = [row for row in rows if all(key in understood for key in row.mandatory)]
-        if not usable:
-            return "error", None, OUTCOME_UNPARSEABLE
-
-        if self.protocol is not None:
-            usable = [row for row in usable if self._speaks(row, self.protocol)]
-            if not usable:
-                return "absent", None, "absent"
-
-        best = min(row.priority for row in usable)
-        views: list[RecordView] = []
-        for row in usable:
-            if row.priority != best:
-                continue
-            view = self._view(row, owner)
-            if view is None:
-                return "error", None, OUTCOME_UNPARSEABLE
-            views.append(view)
-        if len({_view_key(view) for view in views}) > 1:
-            return "error", None, OUTCOME_AMBIGUOUS_RRSET
-        return "present", views[0], "present"
-
-    def _speaks(self, row: SvcbRow, protocol: str) -> bool:
-        key = self.key_map.agent_protocol
-        declared = row.params.get(key) if key is not None else None
-        if declared is not None:
-            return declared.strip().lower() == protocol
-        return protocol in (alpn.lower() for alpn in row.alpn)
-
-    def _view(self, row: SvcbRow, owner: str) -> RecordView | None:
-        """Reduce one ServiceMode row to the discovery view; ``None`` if malformed."""
-        keys = self.key_map
-        host = owner if row.target == "." else normalize_owner(row.target)
-        if host is None:
-            return None
-        path = "/"
-        if keys.path is not None and keys.path in row.params:
-            path = row.params[keys.path]
-            if not path.startswith("/"):
-                return None
-        port = _DEFAULT_PORT if row.port is None else row.port
-        authority = host if port == _DEFAULT_PORT else f"{host}:{port}"
-        service = f"https://{authority}{path}"
-
-        descriptor: str | None = None
-        named = row.params.get(keys.descriptor) if keys.descriptor is not None else None
-        suffix = row.params.get(keys.well_known) if keys.well_known is not None else None
-        if named:
-            descriptor = named
-        elif suffix is not None:
-            if not suffix or any(char in suffix for char in "/?#"):
-                return None
-            descriptor = f"https://{owner}/.well-known/{suffix}"
-
-        digest = row.params.get(keys.descriptor_digest) if keys.descriptor_digest is not None else None
-        return RecordView(
-            endpoint=descriptor if self.target == "descriptor" else service,
-            digest=digest or None,
-        )
+        return reduce_svcb_rows(rows, owner, protocol=self.protocol, target=self.target, key_map=self.key_map)
 
 
 class DnsTxtResolver(_DnsResolverBase):
@@ -451,25 +494,7 @@ class DnsTxtResolver(_DnsResolverBase):
         if answer is None:
             return status, None, outcome
 
-        rows = [fields for fields in map(parse_ans_txt, answer.txt) if fields.get("v") == ANS_TXT_VERSION]
-        if self.protocol is not None:
-            rows = [fields for fields in rows if fields.get("p", "").lower() == self.protocol]
-        if not rows:
-            return "absent", None, "absent"
-
-        views: list[RecordView] = []
-        for fields in rows:
-            url = fields.get("url", "")
-            try:
-                parts = urlsplit(url)
-            except ValueError:
-                return "error", None, OUTCOME_UNPARSEABLE
-            if parts.scheme.lower() not in ("http", "https") or not parts.netloc:
-                return "error", None, OUTCOME_UNPARSEABLE
-            views.append(RecordView(endpoint=url))
-        if len({_view_key(view) for view in views}) > 1:
-            return "error", None, OUTCOME_AMBIGUOUS_RRSET
-        return "present", views[0], "present"
+        return reduce_ans_txt(answer.txt, protocol=self.protocol)
 
 
 # --- the default network path (dnspython) -------------------------------------
