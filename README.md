@@ -85,6 +85,7 @@ federated registry that is not merely decentralized but *auditable*.
 ```bash
 pip install sm-divergence                 # omission + endpoint/key checks (httpx only)
 pip install "sm-divergence[attestation]"  # + verified-DID checks (Ed25519/did:key)
+pip install "sm-divergence[dns]"          # + a DNS zone as a source (SVCB / TXT)
 ```
 
 ## Quick start
@@ -189,8 +190,9 @@ the kernel is untouched.
 sm-resolver  (dependency)  the source-agnostic kernel — Resolver[T], the View
                            contract, Claim, diff_claims, Corroborator, SweepResult
 sm_divergence/
-  discovery/   registry-integrity layer — RecordView + HttpByIdResolver (NEST)
-               + NandaIndexV2Resolver
+  discovery/   registry-integrity layer — RecordView + KnownSubjectResolver
+               + HttpByIdResolver (NEST) + NandaIndexV2Resolver + AnsV2Resolver
+               + DnsSvcbResolver / DnsTxtResolver (a DNS zone as a source)
   identity/    key-consistency layer — DidView + DidKeyResolver / DidWebResolver
                / UniversalResolverResolver + signed self-description
   record.py    the signed Corroboration Record (draft §9)
@@ -214,6 +216,37 @@ await DivergenceDetector(
     ]
 ).check(["agent-1"])
 ```
+
+**A DNS zone is a source too.** `DnsSvcbResolver` reads the SVCB rows at the
+agent's FQDN and `DnsTxtResolver` the `v=ans1` TXT rows at `_ans.{fqdn}`, so
+what a zone publishes can be corroborated against what a registry answers:
+
+```python
+from sm_divergence import DivergenceDetector, DnsSvcbResolver, KnownSubjectResolver
+
+await DivergenceDetector(
+    [
+        KnownSubjectResolver("https://registry.example"),  # POST /resolve
+        DnsSvcbResolver(protocol="a2a"),  # SVCB at the agent's FQDN
+        # the same zone through a second recursive resolver: a zone that answers
+        # differently by vantage is reported as source_equivocation
+        DnsSvcbResolver(protocol="a2a", nameservers=["192.0.2.53"], vantage="resolver-b"),
+    ]
+).check(["agent.example.com"])
+```
+
+By default the zone's claim is the **descriptor** it names (compared with a
+registry's terminal target) and that descriptor's digest; pass
+`target="service"` to compare the service endpoint instead. The agent-specific
+SvcParamKeys have no assigned code point, so `SvcParamKeyMap` says which key
+plays which role. `require_dnssec=True` turns an answer — or a denial — the
+recursive resolver did not authenticate into an `error`, never an `absent`. The
+adapter makes no HTTP request: it does not fetch the descriptor or check the
+digest against it. Needs the `dns` extra.
+
+Digests are canonicalized before they are compared (`digest-normalization/0.1`),
+so one SHA-256 served as hex by a registry and as base64url by a zone is not a
+false `digest` divergence.
 
 **Identity layer** — catches a `did:web` (or a Universal Resolver) serving a
 different verification key than the agent's self-certifying `did:key` root, a

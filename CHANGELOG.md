@@ -4,6 +4,44 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+A DNS zone becomes a source. No kernel change; `sm-resolver` 0.7 is unchanged.
+
+### Added
+
+- **`DnsSvcbResolver`** (`discovery/dns_records.py`) — the SVCB rows (RFC 9460)
+  at the agent's FQDN, one row per agent protocol. Maps the row's descriptor (or
+  its service endpoint, with `target="service"`) onto `endpoint` and the
+  descriptor digest onto `digest`. Follows AliasMode within a bound, ignores
+  rows whose `mandatory` lists a key it does not implement, selects by agent
+  protocol and priority. `SvcParamKeyMap` names the agent-specific SvcParamKeys,
+  which have no assigned code point; the default is the Private Use block
+  65400–65409.
+- **`DnsTxtResolver`** — the `v=ans1` TXT rows at `_ans.{fqdn}`; `url` →
+  `endpoint`.
+- **Never a false `absent` from DNS.** NXDOMAIN, an empty answer and an alias to
+  `.` are absence. A timeout, a failing resolver, an unreadable row, rows that
+  disagree at equal priority, an id with no DNS name, and — with
+  `require_dnssec` — an unauthenticated answer *or denial* are `error` claims
+  with an outcome saying why.
+- **`ai.stellarminds.dns.ambiguous-rrset`** — the first namespaced outcome:
+  equal-priority rows that reduce to different views.
+- **`DnspythonQuery`** — the default DNS network path, behind an injectable
+  `DnsQuery` seam. Tested over the wire against a loopback server.
+- **`dns` extra** (`dnspython>=2.6`), imported only when a default DNS query is
+  built. A base install and every other resolver stay `httpx`-only.
+- **`normalize_digest`** and the `digest-normalization/0.1` profile.
+
+### Changed
+
+- **`RecordView.comparable()` canonicalizes `digest`.** One SHA-256 spelled as
+  prefixed hex, bare hex, or base64 / base64url of the raw bytes now compares
+  equal, and a `digest` finding reports the canonical `sha256:<hex>` form. A
+  value the profile does not recognize is compared literally, as before. This
+  removes a false `digest` divergence between two honest sources; it cannot
+  hide a real one, since distinct digests stay distinct.
+
 ## [0.12.0] — 2026-10-30
 
 Aligns the discovery layer with registry-assisted resolution of known subjects
