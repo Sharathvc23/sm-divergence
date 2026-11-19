@@ -7,6 +7,7 @@ binding; ``HttpByIdResolver`` for NEST-style by-id registries;
 ``NandaIndexV2Resolver`` for the legacy NANDA Index two-hop resolve;
 ``AnsV2Resolver`` for the Agent Name Service one-hop resolve;
 ``AnsLogResolver`` for its public transparency-log badge;
+``CatalogResolver`` for a published AI Catalog document;
 ``DnsSvcbResolver`` / ``DnsTxtResolver`` for a DNS zone as a source), all built
 on the source-agnostic core. Each resolver
 is a thin adapter; adding another registry format is another file here, with no
@@ -16,6 +17,18 @@ change to the core diff.
 from .ans_log import OUTCOME_NO_BADGE, AnsLogResolver, split_badge_url
 from .ans_v2 import AnsV2Resolver, ans_agent_adapter, identity_ansname
 from .attestation import signed_record_adapter, verified_did
+from .catalog import (
+    CATALOG_MEDIA_TYPE,
+    OUTCOME_AMBIGUOUS_ENTRY,
+    OUTCOME_NESTED_NOT_READ,
+    OUTCOME_NO_CATALOG,
+    WELL_KNOWN_CATALOG_PATH,
+    CatalogResolver,
+    air_identifier,
+    entry_to_view,
+    identity_identifier,
+    latest_entries,
+)
 from .client import DEFAULT_PATH, RecordAdapter, default_adapter, fetch_view, looks_absent
 from .closure import binds_by_did
 from .dns_records import (
@@ -63,6 +76,8 @@ from .views import (
 __all__ = [
     "AnsLogResolver",
     "AnsV2Resolver",
+    "CATALOG_MEDIA_TYPE",
+    "CatalogResolver",
     "DEFAULT_KEY_MAP",
     "DEFAULT_PATH",
     "DID",
@@ -79,9 +94,12 @@ __all__ = [
     "KNOWN_SUBJECT_RESOLVE_PATH",
     "KnownSubjectResolver",
     "NandaIndexV2Resolver",
+    "OUTCOME_AMBIGUOUS_ENTRY",
     "OUTCOME_AMBIGUOUS_RRSET",
     "OUTCOME_EXPIRED",
+    "OUTCOME_NESTED_NOT_READ",
     "OUTCOME_NO_BADGE",
+    "OUTCOME_NO_CATALOG",
     "OUTCOME_REVOKED",
     "RESOLUTION_PROFILE",
     "RecordAdapter",
@@ -89,14 +107,19 @@ __all__ = [
     "SubjectFn",
     "SvcParamKeyMap",
     "SvcbRow",
+    "WELL_KNOWN_CATALOG_PATH",
     "agent_name_subject",
+    "air_identifier",
     "ans_agent_adapter",
     "binds_by_did",
     "default_adapter",
+    "entry_to_view",
     "fetch_view",
     "identity_ansname",
+    "identity_identifier",
     "identity_locator",
     "identity_owner",
+    "latest_entries",
     "looks_absent",
     "normalize_digest",
     "normalize_endpoint",

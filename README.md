@@ -193,6 +193,7 @@ sm_divergence/
   discovery/   registry-integrity layer — RecordView + KnownSubjectResolver
                + HttpByIdResolver (NEST) + NandaIndexV2Resolver + AnsV2Resolver
                + AnsLogResolver (a registration log's public badge)
+               + CatalogResolver (a published AI Catalog document)
                + DnsSvcbResolver / DnsTxtResolver (a DNS zone as a source)
   identity/    key-consistency layer — DidView + DidKeyResolver / DidWebResolver
                / UniversalResolverResolver + signed self-description
@@ -272,6 +273,27 @@ credential and answers `404` for an agent the caller may not see, pass
 `not_found_is_absent=False` so the `404` is no claim rather than a false
 `absent`; `ans_agent_adapter(protocol=…)` reads a record that lists
 `endpoints[]`.
+
+**A published catalog is a source too.** `CatalogResolver` reads a publisher's
+AI Catalog document (by default `/.well-known/ai-catalog.json`) and takes the
+entry whose `identifier` names the subject: its `url` is the descriptor and its
+`digest` the descriptor's digest.
+
+```python
+from sm_divergence import CatalogResolver, DivergenceDetector, DnsSvcbResolver
+
+await DivergenceDetector(
+    [
+        CatalogResolver("https://agent.example.com", artifact_type="application/a2a-agent-card+json"),
+        DnsSvcbResolver(protocol="a2a", owner_for=lambda agent_id: "agent.example.com"),
+    ]
+).check(["urn:air:agent.example.com:support"])
+```
+
+No catalog at all is an `error` — the publisher said nothing — and so is a
+subject not found while part of the listing sits in a nested catalog that was
+not read (`follow_nested=True` reads them, within bounds). Only a catalog read
+in full that lists no such identifier is `absent`. Artifacts are never fetched.
 
 Digests are canonicalized before they are compared (`digest-normalization/0.1`),
 so one SHA-256 served as hex by a registry and as base64url by a zone is not a

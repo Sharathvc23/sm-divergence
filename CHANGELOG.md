@@ -41,6 +41,14 @@ A DNS zone becomes a source. No kernel change; `sm-resolver` 0.7 is unchanged.
   entry about another host, and a name with no badge row
   (`ai.stellarminds.ans.no-badge`) are `error` claims, never `absent`. Signatures
   and receipts are not verified.
+- **`CatalogResolver`** (`discovery/catalog.py`) — a publisher's AI Catalog
+  document as a source. The entry whose `identifier` names the subject gives
+  `url` → `endpoint` and `digest` → `digest`. Searches inline nested catalogs;
+  reads nested catalogs by `url` only with `follow_nested`, within depth and
+  document bounds. Takes the latest of several versions; `artifact_type` selects
+  one media type. No catalog (`ai.stellarminds.catalog.no-catalog`), a listing
+  not read in full (`…nested-not-read`) and candidates that disagree
+  (`…ambiguous-entry`) are `error` claims, never `absent`.
 - **`reduce_svcb_rows` / `reduce_ans_txt`** — the pure row-to-claim reductions,
   shared by the DNS resolvers and the log resolver.
 - **`ans_agent_adapter`** — a `RecordAdapter` for an agent record that lists
