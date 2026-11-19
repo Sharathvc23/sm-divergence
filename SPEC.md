@@ -341,9 +341,14 @@ and withhold its superseded target from the field comparison.
 - **By-id resolver, `404` on a credentialed route.** Where a by-id route requires
   a credential and answers `404` both for an agent that does not exist and for
   one the caller may not see, a `404` is not a claim of absence and MUST be
-  classified `error`, not `absent` (§3). The resolver exposes this as a switch;
-  the default remains `404` → `absent`, which is correct only on a route whose
-  `404` means the agent does not exist.
+  classified `error`, not `absent` (§3). The same holds for a `200` body that
+  says "not found". The Agent Name Service by-id resolver therefore classifies
+  both as `error` by default; a deployment MAY classify them `absent` only on a
+  route whose not-found answer can mean nothing but that the agent does not
+  exist. That resolver reads the record's `endpoints[]` list: the entry for the
+  configured protocol gives `metaDataUrl` (descriptor) or `agentUrl` (service
+  endpoint) as `endpoint`, as configured, and `metaDataHash` as `digest`;
+  entries that reduce to different views → `error`.
 - **Digest canonicalization (`digest-normalization/0.1`).** Sources spell one
   SHA-256 differently, and a literal comparison would report two honest sources
   serving the same document as a `digest` divergence. `digest` MUST be

@@ -42,6 +42,7 @@ from sm_divergence.discovery import (
     DnsSvcbResolver,
     RecordView,
     ans_agent_adapter,
+    default_adapter,
     split_badge_url,
     svcb_rows_from_text,
 )
@@ -486,14 +487,14 @@ def ans(response: httpx.Response, **kw: Any) -> AnsV2Resolver:
 
 
 @pytest.mark.asyncio
-async def test_by_id_404_is_absent_by_default_and_no_claim_when_told_so() -> None:
-    assert await ans(httpx.Response(404)).resolve("x") == ("absent", None)
-    assert await ans(httpx.Response(404), not_found_is_absent=False).resolve("x") == ("error", None)
+async def test_by_id_404_is_no_claim_unless_the_route_says_otherwise() -> None:
+    assert await ans(httpx.Response(404)).resolve("x") == ("error", None)
+    assert await ans(httpx.Response(404), not_found_is_absent=True).resolve("x") == ("absent", None)
 
 
 @pytest.mark.asyncio
 async def test_a_404_that_is_no_claim_is_not_an_omission() -> None:
-    hidden = ans(httpx.Response(404), not_found_is_absent=False, label="ans")
+    hidden = ans(httpx.Response(404), label="ans")
     results = await Corroborator([hidden, zone(SVCB_A2A)]).check([FQDN])
     assert all_findings(results) == []
 
@@ -540,8 +541,12 @@ async def test_agent_adapter_edge_cases() -> None:
     flat = httpx.Response(200, json={"endpoint": "https://agent.example/"})
     _, view = await ans(flat, adapter=ans_agent_adapter()).resolve("x")
     assert view is not None and view.endpoint == "https://agent.example"
-    # The default adapter is unchanged: it reads no endpoints[] list.
-    assert await ans(httpx.Response(200, json=RECORD)).resolve("x") == ("present", RecordView())
+    # The resolver's default adapter is this one: protocol and target pass through.
+    _, default = await ans(httpx.Response(200, json=RECORD), protocol="a2a").resolve("x")
+    assert default is not None and default.endpoint == CARD
+    # The generic top-level adapter still reads no endpoints[] list.
+    generic = ans(httpx.Response(200, json=RECORD), adapter=default_adapter)
+    assert await generic.resolve("x") == ("present", RecordView())
     bad = httpx.Response(200, json={"endpoints": ["not-an-object"]})
     assert await ans(bad, adapter=ans_agent_adapter()).resolve("x") == ("error", None)
 

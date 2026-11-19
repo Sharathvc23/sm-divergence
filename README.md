@@ -268,11 +268,12 @@ an `absent`; so is a name with no badge row, since the log was never asked. The
 badge's signatures and the log's receipt are not verified here. Needs the `dns`
 extra.
 
-`AnsV2Resolver` reads a by-id record route instead. Where that route needs a
-credential and answers `404` for an agent the caller may not see, pass
-`not_found_is_absent=False` so the `404` is no claim rather than a false
-`absent`; `ans_agent_adapter(protocol=…)` reads a record that lists
-`endpoints[]`.
+`AnsV2Resolver` reads a by-id record route instead. Because such a route may
+answer `404` for an agent the caller is not allowed to see, a `404` there is no
+claim by default, never a false `absent`; pass `not_found_is_absent=True` only
+where a `404` can mean nothing but "does not exist". It reads the record's
+`endpoints[]` list — `protocol=` picks the entry, `target=` the descriptor or
+the service endpoint.
 
 **A published catalog is a source too.** `CatalogResolver` reads a publisher's
 AI Catalog document (by default `/.well-known/ai-catalog.json`) and takes the

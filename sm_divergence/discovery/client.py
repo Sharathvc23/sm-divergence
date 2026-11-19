@@ -51,7 +51,8 @@ async def fetch_view(
     """One registry's claim about one id (``present`` / ``absent`` / ``error``).
     Never raises.
 
-    ``not_found`` is what a ``404`` means on this route. On a public by-id
+    ``not_found`` is what a ``404`` — or a ``200`` body that says "not found" —
+    means on this route. On a public by-id
     route it is a claim of absence (the default). On a route that also answers
     ``404`` for a record the caller may not see, it is no claim at all: pass
     ``"error"``."""
@@ -71,7 +72,7 @@ async def fetch_view(
     if not isinstance(doc, dict):
         return "error", None
     if looks_absent(doc):
-        return "absent", None
+        return not_found, None
     try:
         return "present", adapter(doc)
     except Exception:

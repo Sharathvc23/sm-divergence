@@ -53,12 +53,22 @@ A DNS zone becomes a source. No kernel change; `sm-resolver` 0.7 is unchanged.
   shared by the DNS resolvers and the log resolver.
 - **`ans_agent_adapter`** — a `RecordAdapter` for an agent record that lists
   `endpoints[]` (`agentUrl`, `metaDataUrl`, `metaDataHash`, `protocol`).
-- **`AnsV2Resolver(not_found_is_absent=False)`** and `fetch_view(not_found=…)` —
-  on a credentialed route whose `404` also covers records the caller may not
-  see, a `404` is `error`, not a false `absent`. The default is unchanged.
+- **`fetch_view(not_found=…)`** — what a not-found answer means on a route.
 
 ### Changed
 
+- **`AnsV2Resolver`: a not-found answer is no claim by default (breaking).** A
+  `404`, or a `200` body that says "not found", is now `error` instead of
+  `absent`: on a credentialed by-id route it may only mean the caller cannot see
+  the record. Pass `not_found_is_absent=True` to restore the previous
+  classification on a route where not-found can mean nothing else.
+- **`AnsV2Resolver`: the default adapter reads `endpoints[]` (breaking).** The
+  default is now `ans_agent_adapter(protocol=…, target=…)`, with `protocol` and
+  `target` as constructor arguments. A record with a top-level `endpoint` and no
+  `endpoints` list is read as before; pass `adapter=default_adapter` for the
+  previous behavior in every case. With several protocols registered and no
+  `protocol` chosen the result is `error`, not an arbitrary entry.
+- `AnsV2Resolver.resolve` no longer raises when `ansname_for` does.
 - **`RecordView.comparable()` canonicalizes `digest`.** One SHA-256 spelled as
   prefixed hex, bare hex, or base64 / base64url of the raw bytes now compares
   equal, and a `digest` finding reports the canonical `sha256:<hex>` form. A
