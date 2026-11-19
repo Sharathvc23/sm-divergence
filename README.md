@@ -86,6 +86,7 @@ federated registry that is not merely decentralized but *auditable*.
 pip install sm-divergence                 # omission + endpoint/key checks (httpx only)
 pip install "sm-divergence[attestation]"  # + verified-DID checks (Ed25519/did:key)
 pip install "sm-divergence[dns]"          # + a DNS zone as a source (SVCB / TXT)
+pip install "sm-divergence[ans]"          # + a registration log, with receipt verification
 ```
 
 ## Quick start
@@ -237,6 +238,12 @@ await DivergenceDetector(
 ).check(["agent.example.com"])
 ```
 
+`DnsZoneResolver` is the two as one source — SVCB first, TXT only when the zone
+publishes no SVCB row — so a zone that uses one record shape is not reported as
+an omission by the other. `DohQuery(url)` reaches a recursive resolver by DNS
+over HTTPS: pass it as `query=` where UDP port 53 is filtered, or to observe a
+zone through a second, independent resolver.
+
 By default the zone's claim is the **descriptor** it names (compared with a
 registry's terminal target) and that descriptor's digest; pass
 `target="service"` to compare the service endpoint instead. The agent-specific
@@ -264,9 +271,22 @@ await DivergenceDetector(
 
 A zone record changed after it was sealed is an `endpoint` or `digest` finding.
 A revoked or expired registration is an `error` claim with that outcome, never
-an `absent`; so is a name with no badge row, since the log was never asked. The
-badge's signatures and the log's receipt are not verified here. Needs the `dns`
-extra.
+an `absent`; so is a name with no badge row, since the log was never asked.
+Needs the `dns` extra.
+
+Give it the log's verification keys and nothing unsigned is used: the event is
+read from the log's signed receipt (signature and Merkle inclusion proof
+checked) and the status from its signed, short-lived status token. Anything that
+does not verify is `error`/`unverifiable`.
+
+```python
+AnsLogResolver("https://log.example", root_keys=open("pinned-root-keys.txt").read())
+```
+
+Pin the keys out of band: keys fetched from the log being read show only that it
+is self-consistent. A verified receipt proves inclusion under the root it
+states, not that the root is current or that no later event supersedes it.
+Needs the `cose` extra (`pip install "sm-divergence[ans]"` brings both).
 
 `AnsV2Resolver` reads a by-id record route instead. Because such a route may
 answer `404` for an agent the caller is not allowed to see, a `404` there is no
@@ -294,7 +314,12 @@ await DivergenceDetector(
 No catalog at all is an `error` — the publisher said nothing — and so is a
 subject not found while part of the listing sits in a nested catalog that was
 not read (`follow_nested=True` reads them, within bounds). Only a catalog read
-in full that lists no such identifier is `absent`. Artifacts are never fetched.
+in full that lists no such identifier is `absent`. A redirect is not followed
+unless `follow_redirects=True`. Artifacts are never fetched.
+
+`examples/live_sweep.py` runs any of these against live sources from the command
+line: `python examples/live_sweep.py agent.example.com --zone --doh <resolver>
+--log <log> --log-keys <file>`.
 
 Digests are canonicalized before they are compared (`digest-normalization/0.1`),
 so one SHA-256 served as hex by a registry and as base64url by a zone is not a

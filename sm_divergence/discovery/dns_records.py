@@ -53,6 +53,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
+import httpx
 from sm_resolver import (
     OUTCOME_REFUSED,
     OUTCOME_TIMEOUT,
@@ -497,6 +498,48 @@ class DnsTxtResolver(_DnsResolverBase):
         return reduce_ans_txt(answer.txt, protocol=self.protocol)
 
 
+class DnsZoneResolver:
+    """One zone as one source: its SVCB rows, else its ``v=ans1`` TXT rows.
+
+    A zone may publish an agent under either record shape. Asked as two sources,
+    a zone that uses only one of them would look as if the other "omits" the
+    agent. This resolver asks the way a client does: the SVCB rows at the FQDN
+    first, and the TXT rows at ``_ans.{fqdn}`` only when no SVCB row exists.
+
+    The fallback is taken on ``absent`` alone. An SVCB answer that is an
+    ``error`` — a failing resolver, rows that cannot be read, rows that disagree
+    — is returned as it is: falling through to another record shape would hide
+    it. Arguments are those of ``DnsSvcbResolver``.
+    """
+
+    def __init__(self, *, label: str | None = None, vantage: str | None = None, **kwargs: Any) -> None:
+        query = kwargs.pop("query", None)
+        if query is None:
+            query = DnspythonQuery(kwargs.get("nameservers"), timeout=kwargs.get("timeout", 5.0))
+        self._label = label or "dns-zone"
+        self.vantage = vantage
+        txt_keys = ("owner_for", "protocol", "require_dnssec", "nameservers", "timeout")
+        self._svcb = DnsSvcbResolver(query=query, label=self._label, vantage=vantage, **kwargs)
+        self._txt = DnsTxtResolver(
+            query=query, label=self._label, vantage=vantage, **{k: v for k, v in kwargs.items() if k in txt_keys}
+        )
+
+    @property
+    def label(self) -> str:
+        return self._label
+
+    async def resolve_with_outcome(self, agent_id: str) -> tuple[Status, RecordView | None, str]:
+        """Never raises. ``present``/``absent`` use their status as outcome."""
+        status, view, outcome = await self._svcb.resolve_with_outcome(agent_id)
+        if status != "absent":
+            return status, view, outcome
+        return await self._txt.resolve_with_outcome(agent_id)
+
+    async def resolve(self, agent_id: str) -> tuple[Status, RecordView | None]:
+        status, view, _ = await self.resolve_with_outcome(agent_id)
+        return status, view
+
+
 # --- the default network path (dnspython) -------------------------------------
 
 
@@ -614,10 +657,71 @@ class DnspythonQuery:
             return DnsAnswer(rcode="OTHER")
 
         authenticated = bool(answer.response.flags & dns.flags.AD)
-        rdatas = list(answer.rrset) if answer.rrset is not None else []
+        return _answer_from_rdatas(list(answer.rrset) if answer.rrset is not None else [], rdtype, authenticated)
+
+
+def _answer_from_rdatas(rdatas: Sequence[Any], rdtype: RdType, authenticated: bool) -> DnsAnswer:
+    try:
+        if rdtype == "SVCB":
+            return DnsAnswer(svcb=tuple(svcb_row_from_rdata(r) for r in rdatas), authenticated=authenticated)
+        return DnsAnswer(txt=tuple(txt_row_from_rdata(r) for r in rdatas), authenticated=authenticated)
+    except Exception:
+        return DnsAnswer(malformed=True, authenticated=authenticated)
+
+
+DNS_MESSAGE_MEDIA_TYPE = "application/dns-message"
+
+
+class DohQuery:
+    """A ``DnsQuery`` over DNS-over-HTTPS (RFC 8484), wire format.
+
+    ``url`` is the resolver's query endpoint. Each lookup is one ``POST`` of a
+    DNS message with the AD bit set; CNAMEs in the answer are followed within
+    that one response. Useful where UDP port 53 is filtered, and as a second,
+    independent recursive resolver to observe a zone from: pair it with a
+    ``vantage`` on the resolver that uses it.
+
+    As with any recursive resolver, the authenticated bit is only as
+    trustworthy as the resolver and the channel to it.
+    """
+
+    def __init__(self, url: str, *, timeout: float = 5.0, transport: httpx.AsyncBaseTransport | None = None) -> None:
+        _require_dnspython()
+        self.url = url
+        self._timeout = timeout
+        self._transport = transport
+
+    async def __call__(self, name: str, rdtype: RdType) -> DnsAnswer:
+        import dns.flags
+        import dns.message
+        import dns.rcode
+
+        query = dns.message.make_query(name, rdtype)
+        query.flags |= dns.flags.AD
+        query.id = 0  # RFC 8484 4.1: a fixed id keeps responses cacheable
+        headers = {"content-type": DNS_MESSAGE_MEDIA_TYPE, "accept": DNS_MESSAGE_MEDIA_TYPE}
         try:
-            if rdtype == "SVCB":
-                return DnsAnswer(svcb=tuple(svcb_row_from_rdata(r) for r in rdatas), authenticated=authenticated)
-            return DnsAnswer(txt=tuple(txt_row_from_rdata(r) for r in rdatas), authenticated=authenticated)
+            async with httpx.AsyncClient(transport=self._transport) as client:
+                resp = await client.post(self.url, content=query.to_wire(), headers=headers, timeout=self._timeout)
+        except httpx.TimeoutException as exc:
+            raise TimeoutError from exc
+        if resp.status_code != 200:
+            raise ConnectionError(f"resolver answered HTTP {resp.status_code}")
+        try:
+            message = dns.message.from_wire(resp.content)
+            rcode = message.rcode()
+            authenticated = bool(message.flags & dns.flags.AD)
+            if rcode == dns.rcode.NXDOMAIN:
+                return DnsAnswer(rcode="NXDOMAIN", authenticated=authenticated)
+            if rcode == dns.rcode.REFUSED:
+                return DnsAnswer(rcode="REFUSED")
+            if rcode == dns.rcode.SERVFAIL:
+                return DnsAnswer(rcode="SERVFAIL")
+            if rcode != dns.rcode.NOERROR:
+                return DnsAnswer(rcode="OTHER")
+            if not isinstance(message, dns.message.QueryMessage):
+                return DnsAnswer(malformed=True)
+            rrset = message.resolve_chaining().answer
         except Exception:
-            return DnsAnswer(malformed=True, authenticated=authenticated)
+            return DnsAnswer(malformed=True)
+        return _answer_from_rdatas(list(rrset) if rrset is not None else [], rdtype, authenticated)

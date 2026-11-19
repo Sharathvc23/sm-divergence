@@ -32,6 +32,7 @@ from sm_divergence.discovery import (
     OUTCOME_AMBIGUOUS_ENTRY,
     OUTCOME_NESTED_NOT_READ,
     OUTCOME_NO_CATALOG,
+    OUTCOME_REDIRECTED,
     CatalogResolver,
     DnsAnswer,
     DnsSvcbResolver,
@@ -336,6 +337,17 @@ async def test_no_catalog_is_not_a_claim_of_absence() -> None:
 @pytest.mark.asyncio
 async def test_a_catalog_that_cannot_be_read_is_not_a_claim(served: Any, outcome: str) -> None:
     assert await outcome_of(resolver(documents={WELL_KNOWN: served})) == ("error", None, outcome)
+
+
+@pytest.mark.asyncio
+async def test_a_redirect_is_not_followed_unless_asked() -> None:
+    www = "https://www.agent.example.com/.well-known/ai-catalog.json"
+    documents = {WELL_KNOWN: httpx.Response(301, headers={"location": www}), www: catalog(entry())}
+    assert await outcome_of(resolver(documents=documents)) == ("error", None, OUTCOME_REDIRECTED)
+    seen: list[str] = []
+    status, view, _ = await outcome_of(resolver(documents=documents, seen=seen, follow_redirects=True))
+    assert status == "present" and view is not None and view.endpoint == CARD
+    assert seen == [WELL_KNOWN, www]
 
 
 @pytest.mark.asyncio

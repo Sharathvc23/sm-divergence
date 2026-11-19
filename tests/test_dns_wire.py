@@ -17,6 +17,7 @@ import dns.message
 import dns.rcode
 import dns.rdatatype
 import dns.rrset
+import httpx
 import pytest
 import pytest_asyncio
 
@@ -25,6 +26,7 @@ from sm_divergence.discovery import (
     DnspythonQuery,
     DnsSvcbResolver,
     DnsTxtResolver,
+    DohQuery,
     RecordView,
     SvcbRow,
 )
@@ -179,3 +181,92 @@ async def test_resolvers_end_to_end_over_the_wire(query: DnspythonQuery) -> None
 def test_default_query_is_built_from_nameservers() -> None:
     resolver = DnsSvcbResolver(nameservers=["192.0.2.53"], timeout=1.0)
     assert resolver.label == "dns-svcb"
+
+
+# --- DNS over HTTPS -----------------------------------------------------------
+
+
+def doh(
+    handler: Callable[[dns.message.Message], dns.message.Message | None], seen: list[httpx.Request] | None = None
+) -> DohQuery:
+    def transport(request: httpx.Request) -> httpx.Response:
+        if seen is not None:
+            seen.append(request)
+        response = handler(dns.message.from_wire(request.content))
+        if response is None:
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, content=response.to_wire(), headers={"content-type": "application/dns-message"})
+
+    return DohQuery("https://resolver.example/dns-query", transport=httpx.MockTransport(transport), timeout=0.5)
+
+
+@pytest.mark.asyncio
+async def test_doh_request_is_a_wire_format_post() -> None:
+    seen: list[httpx.Request] = []
+    result = await doh(answer, seen)("_ans.agent.example.com.", "TXT")
+    assert "v=spf1 -all" in result.txt
+    (request,) = seen
+    assert request.method == "POST" and str(request.url) == "https://resolver.example/dns-query"
+    assert request.headers["content-type"] == "application/dns-message"
+    sent = dns.message.from_wire(request.content)
+    assert sent.id == 0 and sent.flags & dns.flags.AD
+    assert sent.question[0].name.to_text() == "_ans.agent.example.com."
+
+
+@pytest.mark.asyncio
+async def test_doh_answers_reduce_like_the_udp_path() -> None:
+    query = doh(answer)
+    assert len((await query("agent.example.com.", "SVCB")).svcb) == 2
+    assert await query("gone.example.com.", "SVCB") == DnsAnswer(rcode="NXDOMAIN")
+    assert await query("signed-gone.example.com.", "SVCB") == DnsAnswer(rcode="NXDOMAIN", authenticated=True)
+    assert await query("nodata.example.com.", "SVCB") == DnsAnswer()
+    assert (await query("signed.example.com.", "SVCB")).authenticated is True
+    assert (await query("servfail.example.com.", "SVCB")).rcode == "SERVFAIL"
+    assert (await query("refused.example.com.", "SVCB")).rcode == "REFUSED"
+    assert (await query("binary.example.com.", "SVCB")).malformed is True
+
+
+@pytest.mark.asyncio
+async def test_doh_follows_a_cname_within_the_response() -> None:
+    def aliased(query: dns.message.Message) -> dns.message.Message:
+        response = dns.message.make_response(query)
+        name = query.question[0].name
+        response.answer.append(dns.rrset.from_text(name, 300, "IN", "CNAME", "real.example.net."))
+        response.answer.append(
+            dns.rrset.from_text("real.example.net.", 300, "IN", "TXT", '"v=ans1; url=https://a.example/x"')
+        )
+        return response
+
+    assert (await doh(aliased)("_ans.agent.example.com.", "TXT")).txt == ("v=ans1; url=https://a.example/x",)
+
+
+@pytest.mark.asyncio
+async def test_doh_failures_are_not_answers() -> None:
+    with pytest.raises(TimeoutError):
+        await doh(answer)(SILENT, "SVCB")
+
+    def http_500(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    def garbage(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"<html>not dns</html>")
+
+    broken = DohQuery("https://resolver.example/dns-query", transport=httpx.MockTransport(http_500))
+    with pytest.raises(ConnectionError):
+        await broken("agent.example.com.", "SVCB")
+    unreadable = DohQuery("https://resolver.example/dns-query", transport=httpx.MockTransport(garbage))
+    assert (await unreadable("agent.example.com.", "SVCB")).malformed is True
+
+
+@pytest.mark.asyncio
+async def test_resolvers_over_doh_end_to_end() -> None:
+    svcb = DnsSvcbResolver(query=doh(answer))
+    status, view, _ = await svcb.resolve_with_outcome("agent.example.com")
+    assert status == "present" and view is not None and view.endpoint == CARD
+    assert await svcb.resolve_with_outcome("silent.example.com") == ("error", None, "timeout")
+    broken = DnsSvcbResolver(
+        query=DohQuery(
+            "https://resolver.example/dns-query", transport=httpx.MockTransport(lambda r: httpx.Response(502))
+        )
+    )
+    assert await broken.resolve_with_outcome("agent.example.com") == ("error", None, "unreachable")

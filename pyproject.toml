@@ -23,6 +23,11 @@ attestation = ["cryptography>=42", "base58>=2.1", "jcs>=0.2.1"]
 # DNS as a discovery source (SVCB / TXT). Imported only when a default DNS query
 # is built, so every other resolver stays httpx-only.
 dns = ["dnspython>=2.6"]
+# Verifying a transparency log's signed receipt and status token (COSE_Sign1).
+# Imported on first use only.
+cose = ["cbor2>=5.6", "cryptography>=42"]
+# Everything AnsLogResolver can use: attested zone records and verification.
+ans = ["dnspython>=2.6", "cbor2>=5.6", "cryptography>=42"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
@@ -32,6 +37,7 @@ dev = [
     "base58>=2.1",
     "jcs>=0.2.1",
     "dnspython>=2.6",
+    "cbor2>=5.6",
 ]
 
 [project.scripts]
