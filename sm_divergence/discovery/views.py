@@ -5,6 +5,9 @@ a discovery-divergence check compares.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlsplit, urlunsplit
@@ -120,6 +123,61 @@ def normalize_endpoint(value: str | None) -> str | None:
     return urlunsplit((scheme, netloc, path, parts.query, ""))
 
 
+# The digest canonicalization profile this module implements. Sources spell one
+# SHA-256 differently: a `sha256:` prefix with hex, bare hex, or base64url of the
+# raw bytes (the form a DNS SvcParam carries). Compared as strings, two honest
+# sources serving the same document would produce a false `digest` divergence.
+# This pins one canonical form; `test_digest_normalization` is its vector set.
+DIGEST_NORMALIZATION = "digest-normalization/0.1"
+
+_DIGEST_PREFIXES = ("sha256:", "sha-256:")
+_HEX_SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
+_SHA256_BYTES = 32
+
+
+def _base64_sha256(text: str) -> bytes | None:
+    """Decode base64 or base64url text that is exactly one SHA-256, else None."""
+    if len(text) == 43:
+        text += "="
+    elif not (len(text) == 44 and text.endswith("=")):
+        return None
+    try:
+        raw = base64.b64decode(text.replace("-", "+").replace("_", "/"), validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    return raw if len(raw) == _SHA256_BYTES else None
+
+
+def normalize_digest(value: str | None) -> str | None:
+    """Canonicalize a SHA-256 digest under `digest-normalization/0.1`.
+
+    The canonical form is ``sha256:`` followed by 64 lowercase hex characters.
+    Accepted spellings, each with an optional ``sha256:`` / ``sha-256:`` prefix
+    (prefix matched case-insensitively):
+
+    - 64 hex characters, any case;
+    - base64url or standard base64 of the 32 raw bytes, padded or not.
+
+    Anything else is returned unchanged: still compared, just not normalized. A
+    value this profile does not recognize (another algorithm, a truncated
+    digest, an opaque token) is compared literally rather than guessed at.
+    """
+    if value is None:
+        return None
+    body = value
+    lowered = value.lower()
+    for prefix in _DIGEST_PREFIXES:
+        if lowered.startswith(prefix):
+            body = value[len(prefix) :]
+            break
+    if _HEX_SHA256.match(body):
+        return "sha256:" + body.lower()
+    raw = _base64_sha256(body)
+    if raw is not None:
+        return "sha256:" + raw.hex()
+    return value
+
+
 @dataclass(frozen=True)
 class RecordView:
     """A single registry's claim about one agent id.
@@ -132,7 +190,8 @@ class RecordView:
     unverifiable identity contributes no ``did`` — one valid record plus one
     forged one is not a disagreement between two authorities.
     ``digest`` — the integrity digest of the terminal discovery object
-    (``targetDigest``), when the registry serves one. Compared as a string.
+    (``targetDigest``), when the registry serves one. Canonicalized in
+    ``comparable()`` so two spellings of one SHA-256 are not a false divergence.
 
     The remaining members are **not compared**; they position the claim.
     ``sequence`` / ``sequence_scope`` — the registry's renewable-lease position
@@ -153,7 +212,11 @@ class RecordView:
     authority_issuer: str | None = None
 
     def comparable(self) -> Mapping[str, str | None]:
-        return {ENDPOINT: normalize_endpoint(self.endpoint), DID: self.did, DIGEST: self.digest}
+        return {
+            ENDPOINT: normalize_endpoint(self.endpoint),
+            DID: self.did,
+            DIGEST: normalize_digest(self.digest),
+        }
 
     def binding(self) -> Binding | None:
         if self.sequence is None:

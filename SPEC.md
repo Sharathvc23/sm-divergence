@@ -3,7 +3,7 @@
 **Spec version:** `divergence/0.4-draft`
 **Status:** DRAFT / Working Draft
 **Version identifier (wire):** `divergence/0.3`
-**Last edited:** 2026-10-30
+**Last edited:** 2026-11-19
 **Signing/identity substrate (optional):** JCS canonicalization, Ed25519, `did:key` — the convention shared across the `sm-*` family.
 
 The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, MAY are to be interpreted as in RFC 2119.
@@ -217,6 +217,70 @@ and withhold its superseded target from the field comparison.
   configured registry.
 - **By-id resolver** — `GET {base}/api/agents/{id}` (path injectable), classified
   per §3, endpoint read from a top-level field.
+- **DNS SVCB resolver** — a zone as a source: the SVCB rows (`RFC 9460`) at the
+  agent's FQDN, one row per agent protocol. The canonical id maps to that FQDN
+  via a caller-supplied `owner_for`; an id that does not map to a name of at
+  least two labels is `error`/`unparseable` and no query is sent — a bare id is
+  not a DNS name, and querying it would turn an identity-correspondence gap into
+  a false `absent`.
+  1. The name is lowercased, IDNA-encoded and queried as an absolute name; the
+     search list MUST NOT be applied.
+  2. `NXDOMAIN` and an empty answer → `absent`. A timeout → `error`/`timeout`;
+     a transport failure, `SERVFAIL` or any other rcode → `error`/`unreachable`;
+     `REFUSED` → `error`/`refused`; a response holding a record that cannot be
+     read → `error`/`unparseable`. With `require_dnssec`, an answer **or a
+     denial** the recursive resolver did not authenticate (AD bit clear) →
+     `error`/`unverifiable`; this check precedes the absence checks.
+  3. If the RRset holds an AliasMode row, its ServiceMode rows are ignored
+     (`RFC 9460` §2.4.1) and the TargetName is queried in turn, at most
+     `max_alias_hops` times (default 1); a longer chain → `error`/`unparseable`.
+     A TargetName of `.` → `absent` (`RFC 9460` §2.5.1). AliasMode rows naming
+     different targets → `error` with the ambiguous-RRset outcome below.
+  4. A row whose `mandatory` lists a key that is neither registered
+     (`RFC 9460` §14.3.2) nor in the configured key map is ignored (`RFC 9460`
+     §8). If rows existed and all were ignored → `error`/`unparseable`, never
+     `absent`.
+  5. With a `protocol` configured, only rows for it are kept: a row that
+     declares an agent protocol matches on that value alone; a row that declares
+     none matches when the protocol is one of its `alpn` ids. No row kept →
+     `absent`.
+  6. The lowest-priority rows are reduced to views. Rows tied on priority whose
+     views differ → `error` with outcome `ai.stellarminds.dns.ambiguous-rrset`:
+     the zone gave two answers to one question, and choosing between them would
+     be the resolver's claim, not the zone's.
+  7. The view. The **service endpoint** is `https://{host}{:port}{path}` — host
+     is TargetName, or the row's owner when TargetName is `.`; port defaults to
+     443; path defaults to `/`. The **descriptor** is the value of the descriptor
+     key, else `https://{owner}/.well-known/{suffix}` from the well-known key
+     (the suffix MUST be a single path segment), else none. `endpoint` is the
+     descriptor (default) or the service endpoint, as configured; a row naming no
+     descriptor contributes `endpoint = null` and MUST NOT have the service
+     endpoint substituted. `digest` is the value of the descriptor-digest key.
+     No `did` and no lease position: a zone carries neither.
+  The agent-specific SvcParamKeys have no assigned code point, so the key map is
+  configuration; the default reads the Private Use keys 65400 (descriptor), 65401
+  (descriptor digest), 65402 (agent protocol) and 65409 (well-known suffix). The
+  resolver performs no HTTP request: it does not fetch the descriptor, does not
+  check a digest against content, and does not read TLSA. A zone answering
+  differently by recursive resolver is observed by running the source from more
+  than one vantage (§5.2).
+- **DNS TXT resolver** — the `v=ans1` TXT rows at `_ans.{fqdn}`, one row per
+  agent protocol (`v=ans1; version=…; p={protocol}; mode=…; url={endpoint}`).
+  Query-name and response classification are as for the SVCB resolver. The
+  character-strings of each record are joined; `url` is read to the end of the
+  value. Rows without `v=ans1` are ignored; with a `protocol` configured, only
+  rows whose `p` equals it are kept; no row kept → `absent`. A kept row whose
+  `url` is not an absolute `http`/`https` URI → `error`/`unparseable`. Kept rows
+  whose `url` values differ → `error` with the ambiguous-RRset outcome. `url` →
+  `endpoint`; nothing else is populated.
+- **Digest canonicalization (`digest-normalization/0.1`).** Sources spell one
+  SHA-256 differently, and a literal comparison would report two honest sources
+  serving the same document as a `digest` divergence. `digest` MUST be
+  canonicalized before it enters the comparison: the canonical form is `sha256:`
+  followed by 64 lowercase hex characters. Accepted spellings, each with an
+  optional `sha256:` or `sha-256:` prefix (matched case-insensitively), are 64
+  hex characters of any case, and base64url or standard base64 of the 32 raw
+  bytes, padded or not. Any other value is compared literally, unchanged.
 - **NANDA Index v2 resolver (legacy)** — a two-hop pointer resolve, kept for
   registries still exposing it. Under the known-subject profile a registry
   returns a terminal target and never another registry, so an index is one

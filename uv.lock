@@ -214,6 +214,15 @@ wheels = [
 ]
 
 [[package]]
+name = "dnspython"
+version = "2.9.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/49/900383b471c645a3c397f47b3211d1fcecb3a540c98f683494cdf86b33de/dnspython-2.9.2.tar.gz", hash = "sha256:8d4d39a513e649d634004ce4d39ade2352efcea472a0247535a5c2d18a9d7ba9", size = 455484, upload-time = "2026-11-03T23:56:53.601Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/0c/5346358b3a20275d256978c35203ddc2c8617f78c1b23795b79ba22ced6d/dnspython-2.9.2-py3-none-any.whl", hash = "sha256:af15f7d385a6ae2fb35a796fde2138004c8c42c7389090e2addc83e3b3340fd8", size = 360455, upload-time = "2026-11-03T23:56:52.088Z" },
+]
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -529,11 +538,15 @@ attestation = [
 dev = [
     { name = "base58" },
     { name = "cryptography" },
+    { name = "dnspython" },
     { name = "jcs" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
+]
+dns = [
+    { name = "dnspython" },
 ]
 
 [package.metadata]
@@ -542,6 +555,8 @@ requires-dist = [
     { name = "base58", marker = "extra == 'dev'", specifier = ">=2.1" },
     { name = "cryptography", marker = "extra == 'attestation'", specifier = ">=42" },
     { name = "cryptography", marker = "extra == 'dev'", specifier = ">=42" },
+    { name = "dnspython", marker = "extra == 'dev'", specifier = ">=2.6" },
+    { name = "dnspython", marker = "extra == 'dns'", specifier = ">=2.6" },
     { name = "httpx", specifier = ">=0.24" },
     { name = "jcs", marker = "extra == 'attestation'", specifier = ">=0.2.1" },
     { name = "jcs", marker = "extra == 'dev'", specifier = ">=0.2.1" },
@@ -551,7 +566,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "sm-resolver", specifier = ">=0.7" },
 ]
-provides-extras = ["attestation", "dev"]
+provides-extras = ["attestation", "dns", "dev"]
 
 [[package]]
 name = "sm-resolver"
