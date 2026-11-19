@@ -24,6 +24,17 @@ disagreement between two authorities. Supply a cert-verifying ``adapter`` (the
 ANS analogue of :func:`sm_divergence.discovery.attestation.signed_record_adapter`)
 to bring a verified ``did`` into the comparison.
 
+**What a ``404`` means depends on the route.** Where the by-id route
+requires a credential and answers ``404`` both for an agent that does not exist
+and for one the caller may not see, a ``404`` is not a claim of absence. Pass ``not_found_is_absent=False`` whenever the caller is not
+the owner of every agent it sweeps; the ``404`` is then ``error`` — no claim —
+and never a false ``absent``. A sweep by a third party should read the public
+log instead (``AnsLogResolver``), which needs no credential and whose ``404``
+does mean absent.
+
+**The record lists ``endpoints[]``.** ``ans_agent_adapter`` reads that shape;
+the default adapter reads a top-level ``endpoint`` only.
+
 Split-horizon ANS (an ANS-3 DNS zone that answers differently by vantage) is
 caught by running two instances with the same ``label`` and different
 ``vantage`` / ``transport`` — the kernel then attributes the disagreement to
@@ -33,6 +44,7 @@ caught by running two instances with the same ``label`` and different
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any, Literal
 
 import httpx
 from sm_resolver import Status
@@ -41,6 +53,49 @@ from .client import RecordAdapter, default_adapter, fetch_view
 from .views import RecordView
 
 AnsNameFn = Callable[[str], str]
+
+
+def ans_agent_adapter(
+    *, protocol: str | None = None, target: Literal["descriptor", "service"] = "descriptor"
+) -> RecordAdapter:
+    """A ``RecordAdapter`` for an agent record that lists ``endpoints[]``.
+
+    Each entry carries ``protocol``, ``agentUrl`` (the service endpoint) and,
+    optionally, ``metaDataUrl`` with ``metaDataHash`` (the descriptor and its
+    digest). ``protocol`` selects the entry; ``target`` chooses which address
+    becomes ``endpoint``, as for ``DnsSvcbResolver``, so the record compares
+    with what the agent's zone publishes. An entry with no descriptor
+    contributes ``endpoint=None`` under ``target="descriptor"``.
+
+    Entries that reduce to different views raise, which the resolver reports as
+    ``error``: with several protocols registered, ``protocol`` must be set. A
+    record with no ``endpoints`` list falls back to a top-level ``endpoint``.
+    """
+    wanted = protocol.lower() if protocol is not None else None
+
+    def adapter(record: dict[str, Any]) -> RecordView:
+        endpoints = record.get("endpoints")
+        if not isinstance(endpoints, list):
+            return default_adapter(record)
+        views: dict[tuple[tuple[str, str | None], ...], RecordView] = {}
+        for entry in endpoints:
+            if not isinstance(entry, dict):
+                raise ValueError("endpoints[] entry is not an object")
+            if wanted is not None and str(entry.get("protocol", "")).lower() != wanted:
+                continue
+            address = entry.get("metaDataUrl") if target == "descriptor" else entry.get("agentUrl")
+            digest = entry.get("metaDataHash")
+            view = RecordView(
+                endpoint=address if isinstance(address, str) and address else None,
+                digest=digest if isinstance(digest, str) and digest else None,
+            )
+            views[tuple(sorted(view.comparable().items()))] = view
+        if len(views) > 1:
+            raise ValueError("endpoints[] entries disagree; set protocol")
+        return next(iter(views.values())) if views else RecordView()
+
+    return adapter
+
 
 DEFAULT_RECORD_PATH = "/ans/agents/{id}"
 
@@ -64,7 +119,9 @@ class AnsV2Resolver:
         transport: httpx.AsyncBaseTransport | None = None,
         label: str | None = None,
         vantage: str | None = None,
+        not_found_is_absent: bool = True,
     ) -> None:
+        self.not_found_is_absent = not_found_is_absent
         self.ans_url = ans_url.rstrip("/")
         self.ansname_for = ansname_for
         self.record_path = record_path
@@ -88,4 +145,5 @@ class AnsV2Resolver:
                 adapter=self.adapter,
                 path=self.record_path,
                 timeout=self.timeout,
+                not_found="absent" if self.not_found_is_absent else "error",
             )

@@ -273,6 +273,45 @@ and withhold its superseded target from the field comparison.
   `url` is not an absolute `http`/`https` URI → `error`/`unparseable`. Kept rows
   whose `url` values differ → `error` with the ambiguous-RRset outcome. `url` →
   `endpoint`; nothing else is populated.
+- **Transparency-log resolver** — a registration log's public badge as a source,
+  one hop: `GET {log}/v1/agents/{agentId}`, no credential. The badge is the
+  latest sealed event for the agent, and that event attests the DNS records the
+  agent's zone held when it was sealed.
+  1. The canonical id maps to the log's `agentId` via a caller-supplied
+     `agent_id_for`, or — when none is given — through the `v=ans-badge1` TXT row
+     at `_ans-badge.{fqdn}`, whose `url` is `{log}/v1/agents/{agentId}`. A row
+     naming a log other than the one configured → `error`/`unverifiable`:
+     provenance from another log is not a claim by this one. No such row
+     (including `NXDOMAIN`) → `error` with outcome
+     `ai.stellarminds.ans.no-badge`: the log was never asked, so it claimed
+     nothing. Rows naming different entries → `error` with the ambiguous-RRset
+     outcome. A failed lookup keeps its outcome.
+  2. `404` → `absent`; `401`/`403` → `error`/`refused`; any other non-`200` or a
+     transport failure → `error`/`unreachable`; a timeout → `error`/`timeout`; a
+     body that cannot be read as a badge → `error`/`unparseable`.
+  3. Badge `status` `ACTIVE`, `WARNING` or `DEPRECATED` is a live registration.
+     `REVOKED` → `error`/`revoked` and `EXPIRED` → `error`/`expired`: the log
+     holds no current binding, which is neither a claim of absence nor a value
+     to compare. Any other status → `error`/`unparseable`.
+  4. When the expected FQDN is known (an `owner_for` is configured, or the entry
+     was located through the badge row), an entry whose attested host differs →
+     `error`/`unverifiable`.
+  5. The view is reduced from `attestations.dnsRecordsProvisioned`: the SVCB rows
+     at the attested host by steps 4–7 of the DNS SVCB resolver (no AliasMode row
+     is followed); else the `v=ans1` TXT rows at `_ans.{host}` by the DNS TXT
+     resolver's rules; else an empty view — a live registration with nothing to
+     compare. If the reduced view carries no `digest`, it is taken from
+     `attestations.metadataHashes` for the configured protocol, or from its only
+     entry when no protocol is configured.
+  The resolver does not verify the badge's signatures, its inclusion proof, or
+  the log's receipt; the view is the log's claim, compared like any registry's
+  unsigned `endpoint`, and carries no `did`.
+- **By-id resolver, `404` on a credentialed route.** Where a by-id route requires
+  a credential and answers `404` both for an agent that does not exist and for
+  one the caller may not see, a `404` is not a claim of absence and MUST be
+  classified `error`, not `absent` (§3). The resolver exposes this as a switch;
+  the default remains `404` → `absent`, which is correct only on a route whose
+  `404` means the agent does not exist.
 - **Digest canonicalization (`digest-normalization/0.1`).** Sources spell one
   SHA-256 differently, and a literal comparison would report two honest sources
   serving the same document as a `digest` divergence. `digest` MUST be

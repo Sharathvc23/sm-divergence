@@ -32,6 +32,22 @@ A DNS zone becomes a source. No kernel change; `sm-resolver` 0.7 is unchanged.
 - **`dns` extra** (`dnspython>=2.6`), imported only when a default DNS query is
   built. A base install and every other resolver stay `httpx`-only.
 - **`normalize_digest`** and the `digest-normalization/0.1` profile.
+- **`AnsLogResolver`** (`discovery/ans_log.py`) — a transparency log's public
+  badge route (`GET {log}/v1/agents/{agentId}`, no credential) as a source. The
+  DNS records the badge attests are reduced by the same rules as the DNS
+  resolvers, so a log and the zone it sealed compare directly. The entry is
+  named by the caller or located through the `v=ans-badge1` TXT row; a row
+  naming another log is `unverifiable`. `REVOKED` / `EXPIRED` registrations, an
+  entry about another host, and a name with no badge row
+  (`ai.stellarminds.ans.no-badge`) are `error` claims, never `absent`. Signatures
+  and receipts are not verified.
+- **`reduce_svcb_rows` / `reduce_ans_txt`** — the pure row-to-claim reductions,
+  shared by the DNS resolvers and the log resolver.
+- **`ans_agent_adapter`** — a `RecordAdapter` for an agent record that lists
+  `endpoints[]` (`agentUrl`, `metaDataUrl`, `metaDataHash`, `protocol`).
+- **`AnsV2Resolver(not_found_is_absent=False)`** and `fetch_view(not_found=…)` —
+  on a credentialed route whose `404` also covers records the caller may not
+  see, a `404` is `error`, not a false `absent`. The default is unchanged.
 
 ### Changed
 
