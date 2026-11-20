@@ -4,9 +4,14 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.13.0] — 2026-11-19
 
-A DNS zone becomes a source. No kernel change; `sm-resolver` 0.7 is unchanged.
+More sources, read alike: a DNS zone, a registration log (optionally verified
+against its signing keys) and a published catalog join the registries, each
+with the same rule that anything short of a readable answer is `error`, never
+`absent`. No kernel change; `sm-resolver` 0.7 is unchanged.
+
+**Breaking:** two `AnsV2Resolver` defaults change — see *Changed*.
 
 ### Added
 
