@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#f5f7fa" />
+<link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+<title>The Quilt · your agent asked one directory. What if it was wrong?</title>
+<meta name="description" content="John's personal agent is about to book a trip. It asks where the travel company's booking agent is. sm-divergence asks every place that agent is listed, compares the answers, and signs a record of what it found. Eight stories, run live against a zone, a registry, a transparency log and a catalog." />
+<style>
+  :root { --bg:#f5f7fa; --panel:#ffffff; --ink:#111827; --body:#374151; --muted:#6b7280; --line:#e5e7eb; --accent:#2662d9; --accent-ink:#ffffff; --warn:#c2410c; --ok:#1d4ed8; --good:#15803d; --chip:#e8effc; --soft:#f9fafb; --john:#7c3aed; --pim:#ea580c; --src:#0f766e; --dark-2:#1e293b; --dark-muted:#94a3b8;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; --nav:58px; }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 var(--sans); }
+  a { color:var(--accent); }
+  code { font:12.5px/1.5 var(--mono); background:var(--soft); border:1px solid var(--line); border-radius:5px; padding:1px 5px; overflow-wrap:anywhere; }
+  .wrap { max-width:1100px; margin:0 auto; padding:0 20px; }
+  .eyebrow { display:inline-flex; align-items:center; gap:8px; font-size:12px; letter-spacing:.09em; text-transform:uppercase; font-weight:700; color:var(--accent); background:var(--chip); border-radius:999px; padding:4px 12px; }
+  .eyebrow::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--accent); flex:none; }
+  .num { font-size:12px; letter-spacing:.09em; text-transform:uppercase; font-weight:700; color:var(--muted); }
+  h1 { font-size:clamp(30px, 5vw, 52px); line-height:1.08; letter-spacing:-0.025em; font-weight:750; margin:18px 0; max-width:20ch; }
+  h1 em { font-style:normal; color:var(--accent); }
+  h2 { font-size:clamp(23px, 3vw, 32px); line-height:1.15; letter-spacing:-0.02em; font-weight:720; margin:8px 0 10px; max-width:30ch; }
+  h3 { font-size:17px; margin:0 0 6px; font-weight:680; }
+  p { margin:0 0 12px; } .lede { font-size:19px; color:var(--body); max-width:62ch; } .muted { color:var(--muted); } .small { font-size:14px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; font:inherit; font-weight:650; font-size:15px; border-radius:10px; padding:11px 18px; min-height:44px; text-decoration:none; border:1px solid var(--accent); background:var(--accent); color:var(--accent-ink); cursor:pointer; white-space:nowrap; }
+  .btn.secondary { background:var(--panel); color:var(--ink); border-color:var(--line); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .btns { display:flex; flex-wrap:wrap; gap:10px; margin:22px 0 0; }
+  nav.top { position:sticky; top:0; z-index:5; background:rgba(245,247,250,.92); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  nav.top .wrap { display:flex; align-items:center; gap:18px; height:var(--nav); }
+  nav.top .brand { font-weight:750; text-decoration:none; color:var(--ink); font-size:17px; display:flex; align-items:center; gap:9px; white-space:nowrap; }
+  nav.top .brand .mark { width:26px; height:26px; border-radius:7px; background:#000; display:block; object-fit:cover; }
+  nav.top .links { display:flex; gap:16px; margin-left:8px; font-size:14px; } nav.top .links a { color:var(--muted); text-decoration:none; } nav.top .links a:hover { color:var(--ink); }
+  nav.top .cta { margin-left:auto; } nav.top .btn { padding:7px 13px; min-height:38px; font-size:14px; }
+  .short { display:none; }
+  section, .hero { scroll-margin-top:var(--nav); }
+  section { padding:64px 0; } section + section { border-top:1px solid var(--line); }
+  .hero { padding:72px 0 56px; }
+  .live { margin-top:30px; display:flex; gap:12px; align-items:flex-start; font-size:14px; color:var(--muted); background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:11px 14px; }
+  .live .dot { flex:none; width:9px; height:9px; margin-top:7px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 4px rgba(38,98,217,.15); } .live.off .dot { background:var(--muted); box-shadow:none; }
+  .live b { color:var(--ink); font-weight:650; } .live a { overflow-wrap:anywhere; }
+  #liveText { display:flex; flex-wrap:wrap; gap:4px 20px; min-width:0; }
+  .then { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:34px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px 20px; box-shadow:0 1px 2px rgba(0,0,0,.04); min-width:0; }
+  .card.bad { border-color:#fed7aa; } .card.good { border-color:#bfdbfe; }
+  .path { margin:10px 0 0; padding:0; list-style:none; font-size:15px; color:var(--body); }
+  .path li { padding:8px 0; border-top:1px dashed var(--line); display:flex; gap:12px; } .path li:first-child { border-top:0; }
+  .path .k { flex:0 0 128px; color:var(--muted); font-size:13px; padding-top:2px; } .path .v { min-width:0; }
+  .verdict { margin-top:12px; font-weight:650; } .verdict.bad { color:var(--warn); } .verdict.good { color:var(--ok); }
+  .steps { display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; margin-top:26px; }
+  .steps .card .num { color:var(--accent); margin-bottom:6px; } .steps .card p { font-size:15px; color:var(--body); margin:0 0 10px; } .steps .card > code { display:block; white-space:pre-wrap; padding:8px 10px; font-size:12px; }
+  .stories { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:26px; }
+  .story .head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 10px; align-items:baseline; }
+  .story > p { color:var(--body); }
+  .badge { display:inline-block; border-radius:999px; padding:1px 9px; font-size:12px; font-weight:650; background:var(--soft); color:var(--muted); white-space:nowrap; }
+  .badge.pass { background:#dbeafe; color:var(--ok); } .badge.fail { background:#ffedd5; color:var(--warn); }
+  .more { font:inherit; font-size:14px; font-weight:650; color:var(--accent); background:var(--chip); border:0; border-radius:8px; padding:8px 12px; min-height:38px; cursor:pointer; }
+  .trace { background:var(--dark-2); color:var(--dark-muted); border-radius:10px; padding:12px 14px; font:12px/1.55 var(--mono); white-space:pre-wrap; overflow-wrap:anywhere; max-height:360px; overflow:auto; margin-top:12px; }
+  .trace[hidden] { display:none; } .trace .a { color:#86efac; } .trace .john { color:#c4b5fd; } .trace .pim { color:#fdba74; } .trace .fp { color:#93c5fd; } .trace .check { color:#86efac; } .trace .fault { color:#fca5a5; } .trace .co { color:#f9a8d4; } .trace .src { color:#5eead4; }
+  .pill { display:inline-block; border-radius:999px; padding:1px 9px; font-size:12px; font-weight:650; vertical-align:middle; white-space:nowrap; } .pill.john { background:#f3e8ff; color:var(--john); } .pill.pim { background:#ffedd5; color:var(--pim); } .pill.src { background:#ccfbf1; color:var(--src); }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:22px; }
+  .status ul { margin:0; padding-left:18px; font-size:15px; color:var(--body); } .status li { margin:6px 0; } .status li b { color:var(--ink); }
+  .verify { margin-top:18px; } .verify .out { margin-top:12px; font-size:15px; } .verify .ok { color:var(--ok); font-weight:650; } .verify .no { color:var(--warn); font-weight:650; }
+  .fine { margin-top:12px; font-size:13px; }
+  .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-top:26px; }
+  .grid a.card { display:block; text-decoration:none; color:inherit; } .grid a.card:hover { border-color:var(--accent); } .grid .card h3 { color:var(--accent); } .grid .card p { font-size:14.5px; margin:0; color:var(--body); }
+  table.checks { width:100%; border-collapse:collapse; font-size:14px; margin-top:14px; } table.checks td { padding:7px 8px; border-top:1px solid var(--line); vertical-align:top; } table.checks td:first-child { font-family:var(--mono); font-size:12px; color:var(--muted); white-space:nowrap; }
+  pre.snippet { background:var(--dark-2); color:#e2e8f0; border-radius:10px; padding:12px 14px; font:12.5px/1.5 var(--mono); overflow:auto; margin:10px 0 0; }
+  .lookup { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; } .lookup input { font:inherit; flex:1 1 220px; min-width:0; border:1px solid var(--line); border-radius:10px; padding:10px 12px; min-height:44px; }
+  table.claims { width:100%; border-collapse:collapse; font-size:14px; margin-top:12px; } table.claims td, table.claims th { padding:7px 8px; border-top:1px solid var(--line); vertical-align:top; text-align:left; overflow-wrap:anywhere; } table.claims th { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); border-top:0; }
+  .vd { font-weight:700; } .vd.AGREE { color:var(--good); } .vd.DIVERGENT { color:var(--warn); } .vd.INSUFFICIENT { color:var(--muted); }
+  footer { padding:28px 0 44px; font-size:14px; color:var(--muted); border-top:1px solid var(--line); }
+  footer a { display:inline-block; padding:4px 0; }
+  @media (max-width: 980px) { .steps { grid-template-columns:1fr 1fr; } .grid { grid-template-columns:1fr 1fr; } }
+  @media (max-width: 860px) { nav.top .links { display:none; } .then, .stories, .two { grid-template-columns:1fr; } }
+  @media (max-width: 600px) {
+    :root { --nav:52px; } .wrap { padding:0 16px; } nav.top .wrap { gap:12px; } nav.top .brand { font-size:16px; }
+    .long { display:none; } .short { display:inline; } .hero { padding:32px 0 36px; } .eyebrow { font-size:11px; padding:4px 10px; }
+    h1 { margin:14px 0 14px; } .lede { font-size:17px; } .btns .btn { flex:1 1 auto; white-space:normal; text-align:center; }
+    section { padding:40px 0; } .card { padding:16px; border-radius:12px; } .live { margin-top:24px; } #liveText { flex-direction:column; gap:6px; }
+    .then { margin-top:26px; } .path li { flex-direction:column; gap:2px; } .path .k { flex:none; padding-top:0; font-weight:650; }
+    .steps { grid-template-columns:1fr; gap:0; margin-top:22px; }
+    .steps .card { background:none; border:0; border-left:2px solid #bfdbfe; border-radius:0; box-shadow:none; padding:0 0 22px 18px; margin-left:6px; position:relative; }
+    .steps .card::before { content:""; position:absolute; left:-7px; top:3px; width:12px; height:12px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 3px var(--bg); }
+    .steps .card:last-child { border-left-color:transparent; padding-bottom:0; }
+    .trace { max-height:60vh; } .grid { grid-template-columns:1fr; gap:10px; }
+  }
+</style>
+</head>
+<body>
+<nav class="top" aria-label="Main"><div class="wrap">
+  <a class="brand" href="/"><img class="mark" src="/brand/stellarminds-mark.png" alt="" width="26" height="26" />The Quilt</a>
+  <div class="links"><a href="#how">How it works</a><a href="#stories">Stories</a><a href="#record">The record</a><a href="#yours">Your sources</a><a href="#status">What it is</a><a href="#resources">Resources</a></div>
+  <div class="cta"><a class="btn" href="/console"><span class="long">Open the live console</span><span class="short">Run it live</span></a></div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <span class="eyebrow">For agents that look other agents up</span>
+  <h1>Your agent asked one directory where to send the booking. <em>What if it was wrong?</em></h1>
+  <p class="lede">John tells Pim, his personal agent, to book a trip with Travel26. Pim looks up Travel26's booking agent, gets an answer, and sends John's details there. The answer came from one place. If that place was stale, tampered with, or answering Pim differently from everyone else, nothing in the answer says so.</p>
+  <p class="lede">An agent is usually listed in more than one place: its own DNS zone, a registry, a transparency log, the company's catalog. sm-divergence asks all of them, reduces each answer to the same shape, compares them, and signs a record of what each one said. Agreement becomes something Pim can show. Disagreement becomes a finding that names who said what.</p>
+  <div class="btns"><a class="btn" href="/console">Run a story live</a><a class="btn secondary" href="#stories">Read the stories</a></div>
+  <div class="live off" id="live" aria-live="polite"><span class="dot"></span><div id="liveText">Checking the live service…</div></div>
+
+  <div class="then">
+    <div class="card bad">
+      <div class="num">Asking one source</div>
+      <h3>Pim takes the answer it gets</h3>
+      <ul class="path">
+        <li><span class="k">Pim</span><span class="v">Looks the booking agent up in one registry. It returns an agent card address.</span></li>
+        <li><span class="k">The answer</span><span class="v">Well-formed, served over TLS, and unable to say whether anyone else would give the same one.</span></li>
+        <li><span class="k">John's options</span><span class="v">Trust it. There is nothing to check it against, and nothing to show afterwards.</span></li>
+      </ul>
+      <div class="verdict bad">One answer. Nothing to compare it with.</div>
+    </div>
+    <div class="card good">
+      <div class="num">Asking every source</div>
+      <h3>The answers are compared</h3>
+      <ul class="path">
+        <li><span class="k">Sweep</span><span class="v">The zone through two resolvers, the registry, the log, the catalog. Each answer is present, absent, or an error with a reason.</span></li>
+        <li><span class="k">Compare</span><span class="v">Address against address, digest against digest. A source that failed makes no claim; it is never counted as "not listed".</span></li>
+        <li><span class="k">Record</span><span class="v">Every claim, every finding and the verdict, content-addressed and signed. Checked in the browser, offline.</span></li>
+      </ul>
+      <div class="verdict good">Agreement Pim can show. Disagreement with names on it.</div>
+    </div>
+  </div>
+</div></header>
+
+<section id="how"><div class="wrap">
+  <div class="num">01 / How a sweep works</div>
+  <h2>Five steps. Each source keeps its own wire format; the comparison doesn't care.</h2>
+  <p class="muted">Travel26's booking agent is listed in four places, and every run of this demo builds all four: a zone served over DNS-over-HTTPS, a registry, a transparency log that issues signed receipts, and a catalog document. The library asks them over HTTP; nothing is mocked inside it.</p>
+  <div class="steps">
+    <div class="card"><div class="num">1 · Ask every source</div><p>One adapter per place the agent is listed. Each knows that source's own id for the agent and its own format.</p><code>SVCB row · JSON record · COSE receipt · catalog entry</code></div>
+    <div class="card"><div class="num">2 · Reduce</div><p>Every answer becomes the same small view: where the agent's card is, and what it should hash to. Three spellings of one digest become one.</p><code>RecordView(endpoint, digest)</code></div>
+    <div class="card"><div class="num">3 · Classify</div><p>Present, absent, or error. A timeout, a 503, a receipt that doesn't verify, a revoked registration: each is an error with its reason, and none is a claim of absence.</p><code>present · absent · error(outcome)</code></div>
+    <div class="card"><div class="num">4 · Compare</div><p>The claims are diffed. Different address, different digest, one source missing the agent, one source telling two vantages different things.</p><code>AGREE · DIVERGENT · INSUFFICIENT</code></div>
+    <div class="card"><div class="num">5 · Sign the record</div><p>One record per sweep, whatever the verdict: an AGREE record is the proof the check ran. Canonical JSON, a content address, an Ed25519 signature.</p><code>verifyRecord(record) → ok</code></div>
+  </div>
+  <p class="small muted" style="margin-top:16px">One source alone is INSUFFICIENT, never AGREE. A verdict says whether the sources agree with each other. It doesn't say which one is right.</p>
+</div></section>
+
+<section id="stories"><div class="wrap">
+  <div class="num">02 / The stories</div>
+  <h2>Each story runs live against fresh sources. Run one yourself.</h2>
+  <p class="muted">Every run builds a new zone, registry, log and catalog for Travel26, changes what one of them says, runs the sweep, and checks the result. Below is the latest live run of each story. While a run is kept, its sources stay open under <code>/runs/&lt;id&gt;/</code>.</p>
+  <div class="stories" id="storyCards"></div>
+</div></section>
+
+<section id="record"><div class="wrap">
+  <div class="num">03 / The record</div>
+  <h2>Check the latest record yourself, in this browser.</h2>
+  <p class="muted">This page recomputes the record's content address and verifies its signature itself (WebCrypto when available, pure JavaScript otherwise). It doesn't ask the server whether the record is valid.</p>
+  <div class="card verify">
+    <div id="recordSummary" class="small muted">No live run yet.</div>
+    <div id="recordClaims"></div>
+    <div class="btns"><button class="btn" id="verifyBtn" disabled>Check the record</button><button class="btn secondary" id="tamperBtn" disabled>Change one detail, then check</button><button class="btn secondary" id="rawBtn" disabled>Show the record</button></div>
+    <div class="out" id="verifyOut" aria-live="polite"></div>
+    <pre class="snippet" id="rawRecord" hidden></pre>
+  </div>
+  <p class="small muted" style="margin-top:12px">A valid record proves that this key signed exactly these claims and that nothing changed since. It doesn't prove the signer asked the sources honestly, and it doesn't prove any source told the truth. This site's key is at <a href="/key"><code>/key</code></a>.</p>
+  <p class="fine muted">For the technically minded: the record is RFC 8785 canonical JSON. <code>record_id</code> is SHA-256 over every member except itself and <code>signature</code>; <code>signature</code> is Ed25519 over every member except itself; <code>sweeper</code> is a <code>did:key</code>, which is the public key. Format <code id="recordVersion">corroboration/0.4</code>, specified in the repository.</p>
+</div></section>
+
+<section id="yours"><div class="wrap">
+  <div class="num">04 / Your sources</div>
+  <h2>The same sweep, against the places your agents are really listed.</h2>
+  <div class="grid">
+    <div class="card"><div class="num">Install</div><h3>The library</h3><p>Python 3.11+. Adapters for a DNS zone, a registry record by id, a transparency log and a published catalog; bring your own with three methods.</p><pre class="snippet">pip install 'sm-divergence[ans,attestation]'</pre></div>
+    <div class="card"><div class="num">One subject</div><h3>From the command line</h3><p>Ask a zone through a resolver you choose, a log and a catalog about one agent, and print each claim, each finding and the verdict.</p><pre class="snippet">python examples/live_sweep.py agent.example.com \
+  --zone --doh https://…/dns-query \
+  --log https://… --catalog https://…</pre></div>
+    <div class="card"><div class="num">In your agent</div><h3>Before it acts on a lookup</h3><p>Sweep, then decide. The record is what you keep: what every source said at that moment, signed.</p><pre class="snippet">(result,) = await Corroborator(sources).check([agent_id])
+record = build_corroboration_record(result, …)</pre></div>
+  </div>
+  <div class="card" id="lookupCard" style="margin-top:14px" hidden>
+    <div class="num">Try a real name</div>
+    <h3>Does a domain's zone publish an agent record, and does it say the same thing to every resolver?</h3>
+    <p class="small muted">This asks the DNS only: the name's SVCB row, else its <code>_ans</code> TXT row, through <span id="lookupVantages">the resolvers this site is configured with</span>. Most names publish neither; that is an answer too. The site fetches nothing from the name you type.</p>
+    <form class="lookup" id="lookupForm"><input id="lookupName" name="domain" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="agent.example.com" aria-label="Domain name" /><button class="btn" type="submit">Ask its zone</button></form>
+    <div class="out small" id="lookupOut" aria-live="polite"></div>
+  </div>
+</div></section>
+
+<section id="status" class="status"><div class="wrap">
+  <div class="num">05 / What it is</div>
+  <h2>What this is, and what it isn't.</h2>
+  <div class="two">
+    <div class="card">
+      <h3>What this is</h3>
+      <ul>
+        <li>A working demo of <b>sm-divergence</b> <span id="libVersion"></span> on the <b>sm-resolver</b> kernel: the DNS, registry, log and catalog adapters, the comparison, and the signed Corroboration Record.</li>
+        <li><span class="pill john">John</span>, <span class="pill pim">Pim</span> and <span class="pill src">Travel26</span> are fictional. Every name ends in <code>.example</code>, and every key is made for the run.</li>
+        <li>The four sources are real servers of their formats: DNS answers in wire format over RFC 8484, COSE_Sign1 receipts with RFC 9162 inclusion proofs, signed status tokens, a catalog document. The library reads them with the same code it uses against production sources.</li>
+        <li>What goes wrong in a story goes wrong in a source. Every check reads the sweep's result or the signed record.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>What it isn't</h3>
+      <ul>
+        <li><b>Not a verdict on who is right.</b> DIVERGENT means the sources disagree. Deciding which one to believe is a policy, and it is yours.</li>
+        <li><b>Not proof the sources are independent.</b> Four listings fed from one database agree with each other however wrong that database is.</li>
+        <li><b>Not a check of the agent card itself.</b> The card is never fetched. Sources' stated addresses and digests are compared with each other.</li>
+        <li><b>Not proof of an honest sweeper.</b> A signature shows which key signed a record and that it hasn't changed, not that the signer asked what the record says it asked.</li>
+        <li><b>Not a monitor.</b> A sweep is one moment. Two sources that agree now can disagree in an hour.</li>
+        <li><b>Not independently tested.</b> One team built the sources, the stories and the checks.</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section id="resources"><div class="wrap">
+  <div class="num">06 / Resources</div>
+  <h2>The code, the spec, and the demos next to this one.</h2>
+  <div class="grid">
+    <a class="card" href="https://github.com/Sharathvc23/sm-divergence"><div class="num">Source</div><h3>sm-divergence</h3><p>The adapters, the detector, the Corroboration Record, this site and its stories.</p></a>
+    <a class="card" href="https://github.com/Sharathvc23/sm-divergence/blob/main/SPEC.md"><div class="num">Spec</div><h3>What a claim, a finding and a record are</h3><p>The resolver contract, the outcomes, the record format and how to verify one.</p></a>
+    <a class="card" href="https://github.com/Sharathvc23/sm-divergence/blob/main/WHITEPAPER.md"><div class="num">Paper</div><h3>Why corroborate</h3><p>The argument for asking more than one source, and what agreement does and doesn't show.</p></a>
+    <a class="card" href="https://pypi.org/project/sm-divergence/"><div class="num">Package</div><h3>On PyPI</h3><p><code>pip install sm-divergence</code>, with extras for DNS, signed log receipts and signed records.</p></a>
+    <a class="card" href="https://act.stellarminds.ai"><div class="num">Sibling demo</div><h3>Agent Continuity</h3><p>When a personal agent stops mid-booking, the next one finds out whether it went through. Same John.</p></a>
+    <a class="card" href="https://forget.stellarminds.ai"><div class="num">Sibling demo</div><h3>forgetproof</h3><p>When a personal agent forgets something, is it gone? Same format, same Pim.</p></a>
+  </div>
+</div></section>
+
+<footer><div class="wrap">The Quilt · sm-divergence · a StellarMinds.ai research demo · <a href="/console">Console</a> · <a href="/key">This site's key</a></div></footer>
+
+<script type="module">
+import { verifyRecord } from "/static/verify.js";
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const SOURCES = ["zone", "registry", "log", "catalog"];
+const actorClass = (a) => a === "John" ? "john" : a === "Pim" ? "pim" : SOURCES.includes(a) ? "src" : a === "sm-divergence" ? "fp" : a === "check" ? "check" : /fault/.test(a) ? "fault" : "co";
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "");
+const $ = (id) => document.getElementById(id);
+let config = { stories: [] }, latest = {};
+const titleOf = (name) => config.stories.find((s) => s.name === name)?.title ?? name;
+
+function claimsTable(record) {
+  const rows = record.claims.map((c) => `<tr><td>${esc(c.source)}${c.vantage ? ` <span class="muted">via ${esc(c.vantage)}</span>` : ""}</td><td>${esc(c.status)}${c.status === "error" ? ` <span class="muted">(${esc(c.outcome)})</span>` : ""}</td><td>${c.view ? `${esc(c.view.endpoint ?? "no address")}<br><span class="muted">${esc(c.view.digest ?? "no digest")}</span>` : `<span class="muted">nothing to compare</span>`}</td></tr>`).join("");
+  const findings = record.findings.length ? record.findings.map((f) => `<code>${esc(f.kind)}</code>`).join(" ") : "none";
+  return `<table class="claims"><thead><tr><th>Source</th><th>Status</th><th>What it said</th></tr></thead><tbody>${rows}</tbody></table><p class="small" style="margin-top:10px"><b>Findings:</b> ${findings}</p>`;
+}
+
+async function load() {
+  [config, latest] = await Promise.all([fetch("/config").then((r) => r.json()), fetch("/api/latest").then((r) => r.json()).catch(() => ({}))]);
+  const runs = Object.values(latest);
+  const at = (r) => r.finished_at ?? r.started_at;
+  const last = runs.sort((a, b) => String(at(b)).localeCompare(String(at(a))))[0];
+  $("live").classList.toggle("off", !last);
+  $("liveText").innerHTML = [
+    last ? `<span><b>Last live run:</b> ${esc(titleOf(last.scenario))}, ${last.status === "passed" ? "passed" : esc(last.status)} · ${esc(when(at(last)))}</span>` : `<span>No live run recorded yet.</span>`,
+    `<span><b>Sources per run:</b> zone ×2 resolvers, registry, log, catalog</span>`,
+    `<span><b>This site signs as:</b> <code>${esc(config.sweeper.slice(0, 24))}…</code></span>`,
+    `<span><b>sm-divergence</b> ${esc(config.version)}</span>`,
+  ].join("");
+  $("libVersion").textContent = config.version;
+  $("recordVersion").textContent = config.record_version;
+  const cards = $("storyCards");
+  cards.innerHTML = "";
+  for (const s of config.stories) {
+    const run = latest[s.name];
+    const ok = run?.status === "passed";
+    const records = run?.result?.records || [];
+    const verdicts = records.map((r) => r.record.verdict).join(" → ");
+    const el = document.createElement("div");
+    el.className = "card story";
+    el.innerHTML = `<div class="head"><h3>${esc(s.title)}</h3><span class="badge ${run ? (ok ? "pass" : "fail") : ""}">${run ? (ok ? `passed ${run.checks.passed}/${run.checks.total}` : esc(run.status)) : "not run yet"}</span></div>
+      <p class="small">${esc(s.text)}</p>
+      ${run ? `<p class="small muted">${esc(verdicts)} · ${plural(records.length, "signed record")} · ${esc(when(run.finished_at ?? run.started_at))}</p>
+      <button class="more" type="button" data-open="${s.name}" aria-expanded="false" aria-controls="trace-${s.name}">Show the run</button>
+      <div class="trace" id="trace-${s.name}" hidden></div>` : `<a class="more" href="/console" style="text-decoration:none;display:inline-block">Run it live</a>`}`;
+    cards.appendChild(el);
+  }
+  cards.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => {
+    const name = b.getAttribute("data-open");
+    const box = $(`trace-${name}`);
+    if (!box.innerHTML) {
+      const run = latest[name];
+      const checks = run.result.checks.items.map((c) => `<span class="a">${c.ok ? "✓" : "✗"}</span> ${esc(c.name)}${c.detail && !c.ok ? ` — ${esc(c.detail)}` : ""}`).join("\n");
+      const tl = run.timeline.filter((t) => t.actor !== "check").map((t) => `<span class="${actorClass(t.actor)}">${esc(t.actor)}</span>  ${esc(t.text)}`).join("\n");
+      box.innerHTML = `CHECKS (each one reads the sweep's result or the signed record)\n${checks}\n\nWHAT HAPPENED (the parties' own log)\n${tl}`;
+    }
+    const open = box.hidden;
+    box.hidden = !open;
+    b.setAttribute("aria-expanded", String(open));
+    b.textContent = open ? "Hide the run" : "Show the run";
+  }));
+  setupVerify(last);
+  setupLookup();
+}
+
+function setupVerify(last) {
+  const entry = last?.result?.records?.at(-1);
+  if (!entry) return;
+  const record = entry.record;
+  $("recordSummary").innerHTML = `From <b>${esc(titleOf(last.scenario))}</b> (${esc(entry.label)}): verdict <span class="vd ${esc(record.verdict)}">${esc(record.verdict)}</span> for <code>${esc(record.subject.agent_id)}</code>, observed ${esc(when(record.observed_at))}. Record <code>${esc(record.record_id.slice(0, 16))}…</code>`;
+  $("recordClaims").innerHTML = claimsTable(record);
+  const out = $("verifyOut");
+  const say = (res, changed) => {
+    out.innerHTML = res.ok
+      ? `<span class="ok">✓ Valid.</span> The content matches its address and the signature is this site's${changed ? "" : `: <code>${esc(res.sweeper.slice(0, 28))}…</code>`}.`
+      : `<span class="no">✗ Not valid:</span> ${esc(res.why)}.${changed ? ` ${esc(changed)}` : ""}`;
+  };
+  for (const id of ["verifyBtn", "tamperBtn", "rawBtn"]) $(id).disabled = false;
+  $("verifyBtn").onclick = async () => say(await verifyRecord(record, { trustedSweeper: config.sweeper }));
+  $("tamperBtn").onclick = async () => {
+    const copy = structuredClone(record);
+    const from = copy.verdict;
+    copy.verdict = from === "AGREE" ? "DIVERGENT" : "AGREE";
+    say(await verifyRecord(copy, { trustedSweeper: config.sweeper }), `The verdict was changed from ${from} to ${copy.verdict} before checking.`);
+  };
+  $("rawBtn").onclick = () => {
+    const pre = $("rawRecord");
+    pre.textContent = JSON.stringify(record, null, 2);
+    pre.hidden = !pre.hidden;
+    $("rawBtn").textContent = pre.hidden ? "Show the record" : "Hide the record";
+  };
+}
+
+function setupLookup() {
+  if (!config.lookup?.enabled) return;
+  $("lookupCard").hidden = false;
+  $("lookupVantages").textContent = `${plural(config.lookup.vantages.length, "resolver")} (${config.lookup.vantages.join(", ")})`;
+  $("lookupForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const out = $("lookupOut");
+    out.textContent = "Asking…";
+    const res = await fetch("/api/lookup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ domain: $("lookupName").value }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { out.innerHTML = `<span class="no">${esc(body.error_description ?? `HTTP ${res.status}`)}</span>`; return; }
+    const check = await verifyRecord(body.record, { trustedSweeper: config.sweeper });
+    const present = body.record.claims.some((c) => c.status === "present");
+    const absent = body.record.claims.every((c) => c.status === "absent");
+    const plain = present ? "This zone publishes an agent record." : absent ? "Every resolver answered, and this zone publishes no agent record." : "Not every resolver gave a usable answer.";
+    out.innerHTML = `<p><b>${esc(body.domain)}</b>: <span class="vd ${esc(body.verdict)}">${esc(body.verdict)}</span>. ${plain}</p>${claimsTable(body.record)}<p class="muted">Signed record <code>${esc(body.record.record_id.slice(0, 16))}…</code> ${check.ok ? "verified in this browser." : `did not verify: ${esc(check.why)}.`}</p>`;
+  });
+}
+
+load().catch(() => { $("liveText").textContent = "The live service isn't answering right now."; });
+</script>
+</body>
+</html>

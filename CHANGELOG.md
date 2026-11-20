@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `demo/`: a live demo site (Starlette) with eight stories run against four
+  fictional sources built per run — a zone over DNS-over-HTTPS, a registry, a
+  log issuing signed receipts, a catalog — plus an in-browser verifier for the
+  Corroboration Record, a `Dockerfile` and `railway.json`. New `site` extra.
+  The installed package is unchanged.
+
 ## [0.13.0] — 2026-11-19
 
 More sources, read alike: a DNS zone, a registration log (optionally verified
