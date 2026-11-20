@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#f5f7fa" />
+<link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+<title>The Quilt console · run a sweep live</title>
+<style>
+  :root { --bg:#f5f7fa; --panel:#ffffff; --ink:#111827; --body:#374151; --muted:#6b7280; --line:#e5e7eb; --accent:#2662d9; --accent-ink:#fff; --warn:#c2410c; --ok:#1d4ed8; --good:#15803d; --chip:#e8effc; --soft:#f9fafb; --dark-2:#1e293b; --dark-muted:#94a3b8;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 var(--sans); }
+  a { color:var(--accent); } code { font:12.5px/1.5 var(--mono); background:var(--soft); border:1px solid var(--line); border-radius:5px; padding:1px 5px; overflow-wrap:anywhere; }
+  .wrap { max-width:1180px; margin:0 auto; padding:0 20px; }
+  header { border-bottom:1px solid var(--line); background:var(--panel); }
+  header .wrap { display:flex; align-items:center; gap:12px; height:56px; } header b { font-size:17px; } header .sub { margin-left:2px; }
+  header .right { margin-left:auto; display:flex; gap:14px; align-items:center; font-size:14px; }
+  .mark { width:26px; height:26px; border-radius:7px; background:#000; display:block; object-fit:cover; }
+  details.admin summary { cursor:pointer; color:var(--muted); list-style:none; } details.admin.set summary { color:var(--good); }
+  details.admin .panel { position:absolute; right:20px; margin-top:8px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; width:320px; box-shadow:0 8px 30px rgba(0,0,0,.08); z-index:3; }
+  .row { display:flex; gap:8px; margin-top:8px; } input { font:inherit; flex:1; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  main { display:grid; grid-template-columns:400px 1fr; gap:16px; padding:20px 0 60px; } .col { min-width:0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px 18px; box-shadow:0 1px 2px rgba(0,0,0,.04); margin-bottom:14px; }
+  h2 { font-size:16px; margin:0 0 10px; font-weight:700; } .small { font-size:13px; } .muted { color:var(--muted); }
+  .story { padding:10px 0; border-top:1px solid var(--line); } .story:first-child { border-top:0; padding-top:0; } .story b { display:block; } .story p { margin:4px 0 8px; font-size:13.5px; color:var(--body); }
+  .btn { display:inline-flex; align-items:center; gap:8px; font:inherit; font-weight:650; font-size:14px; border-radius:9px; padding:8px 14px; min-height:36px; border:1px solid var(--accent); background:var(--accent); color:var(--accent-ink); cursor:pointer; white-space:nowrap; text-decoration:none; }
+  .btn.secondary { background:var(--panel); color:var(--ink); border-color:var(--line); } .btn.small { padding:5px 10px; min-height:30px; font-size:13px; } .btn:disabled { opacity:.5; cursor:default; }
+  .status { display:flex; gap:10px; align-items:center; } .dot { width:10px; height:10px; border-radius:50%; background:var(--muted); flex:none; } .dot.run { background:var(--accent); animation:pulse 1s infinite; } .dot.ok { background:var(--good); } .dot.fail { background:var(--warn); }
+  @keyframes pulse { 50% { opacity:.3; } }
+  .legend { margin:6px 0 10px; }
+  .timeline { background:var(--dark-2); border-radius:10px; padding:12px 14px; font:12.5px/1.6 var(--mono); color:var(--dark-muted); min-height:300px; max-height:60vh; overflow:auto; }
+  .timeline .row { display:grid; grid-template-columns:96px 1fr; gap:10px; margin:0; } .who { font-weight:700; } .who.john { color:#c4b5fd; } .who.pim { color:#fdba74; } .who.fp { color:#93c5fd; } .who.check { color:#86efac; } .who.fault { color:#fca5a5; } .who.site { color:#f9a8d4; } .who.co { color:#fcd34d; } .who.src { color:#5eead4; }
+  ul.checks { list-style:none; padding:0; margin:0; font-size:14px; } ul.checks li { padding:6px 0; border-top:1px solid var(--line); display:flex; gap:10px; } ul.checks li:first-child { border-top:0; } ul.checks .ok { color:var(--good); font-weight:700; } ul.checks .no { color:var(--warn); font-weight:700; }
+  .receipts .r { padding:10px 0; border-top:1px solid var(--line); } .receipts .r:first-child { border-top:0; } .badge { display:inline-block; border-radius:999px; padding:1px 9px; font-size:12px; font-weight:650; background:var(--soft); color:var(--muted); } .badge.clean { background:#dcfce7; color:var(--good); } .badge.bad { background:#ffedd5; color:var(--warn); } .badge.insufficient { background:#fef3c7; color:#92400e; }
+  table.claims { width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; } table.claims td { padding:5px 6px; border-top:1px solid var(--line); vertical-align:top; overflow-wrap:anywhere; }
+  pre { background:var(--soft); border:1px solid var(--line); border-radius:8px; padding:10px; font:12px/1.5 var(--mono); overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; max-height:300px; }
+  .recent div { padding:6px 0; border-top:1px dashed var(--line); } .recent div:first-child { border-top:0; }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <a href="/" aria-label="The Quilt home"><img class="mark" src="/brand/stellarminds-mark.png" alt="" width="26" height="26" /></a><b>Console</b><span class="sub muted small">run a sweep against four live sources</span>
+  <div class="right">
+    <a href="/">About</a>
+    <details class="admin" id="admin"><summary>Admin</summary>
+      <div class="panel"><label for="token">Admin token</label><div class="small muted">Not needed to run a story. It only lifts the limits.</div>
+      <div class="row"><input id="token" type="password" autocomplete="off" /><button class="btn secondary" id="saveToken">Save</button></div></div>
+    </details>
+  </div>
+</div></header>
+<div class="wrap"><main>
+  <div class="col">
+    <section class="card" id="storiesCard">
+      <h2>Stories</h2>
+      <div id="storyList"></div>
+      <p class="small">Anyone can run these. Each run builds its own sources on this server, so there are limits: three runs at a time, and five per visitor every ten minutes.</p>
+      <p class="small muted">A run takes a second or two: every source is asked over HTTP and the log signs a fresh receipt each time.</p>
+    </section>
+    <section class="card" id="ownCard">
+      <h2>Your own sources</h2>
+      <p class="small">The same sweep, against the places your agents are listed:</p>
+      <pre>pip install 'sm-divergence[ans,attestation]'</pre>
+      <p class="small">Adapters, the record format and how to write a resolver for a source of your own are in the <a href="https://github.com/Sharathvc23/sm-divergence">repository</a>.</p>
+    </section>
+    <section class="card" id="recentCard"><h2>Recent runs</h2><div id="recent" class="small muted recent">None yet.</div></section>
+  </div>
+  <div class="col">
+    <section class="card" id="runCard" aria-live="polite">
+      <div class="status"><span class="dot" id="dot"></span><b id="statusText">Pick a story to run it live.</b></div>
+      <p class="small muted legend">The log below is the parties' own words. <b>Pim</b> is John's agent; <b>zone</b>, <b>registry</b>, <b>log</b> and <b>catalog</b> are the sources; <b>sm-divergence</b> is the library; a <b>check</b> reads the result.</p>
+      <div class="timeline" id="timeline"></div>
+    </section>
+    <section class="card" id="resultCard" hidden>
+      <h2>Checks</h2><ul class="checks" id="checks"></ul>
+      <h2 style="margin-top:16px">Signed records</h2><div class="receipts" id="records"></div>
+      <p class="small muted" id="sourcesLine" style="margin-top:12px"></p>
+    </section>
+  </div>
+</main></div>
+<script type="module">
+import { verifyRecord } from "/static/verify.js";
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const SOURCES = ["zone", "registry", "log", "catalog"];
+const cls = (a) => a === "John" ? "john" : a === "Pim" ? "pim" : SOURCES.includes(a) ? "src" : a === "sm-divergence" ? "fp" : a === "check" ? "check" : /fault/.test(a) ? "fault" : a === "site" ? "site" : "co";
+const $ = (id) => document.getElementById(id);
+const narrow = () => matchMedia("(max-width: 900px)").matches;
+let config = { stories: [] };
+const titleOf = (name) => config.stories.find((s) => s.name === name)?.title ?? name;
+// -- admin token ----------------------------------------------------------------------------------
+const tokenEl = $("token");
+const markAdmin = () => $("admin").classList.toggle("set", Boolean(tokenEl.value));
+try { tokenEl.value = localStorage.getItem("quilt-admin-token") ?? ""; } catch {}
+markAdmin();
+$("saveToken").onclick = () => { try { localStorage.setItem("quilt-admin-token", tokenEl.value); } catch {} markAdmin(); $("saveToken").textContent = "Saved"; setTimeout(() => { $("saveToken").textContent = "Save"; $("admin").open = false; }, 900); };
+const authHeaders = () => (tokenEl.value ? { authorization: `Bearer ${tokenEl.value}` } : {});
+// -- stories --------------------------------------------------------------------------------------
+config = await fetch("/config").then((r) => r.json());
+const list = $("storyList");
+for (const s of config.stories) {
+  const d = document.createElement("div");
+  d.className = "story";
+  d.innerHTML = `<b>${esc(s.title)}</b><p>${esc(s.text)}</p><button class="btn small" data-run="${s.name}">Run live</button>`;
+  list.appendChild(d);
+}
+list.querySelectorAll("[data-run]").forEach((b) => (b.onclick = () => start(b.getAttribute("data-run"))));
+const setStatus = (state, text) => { $("dot").className = `dot ${state}`; $("statusText").textContent = text; };
+const busy = (on) => document.querySelectorAll("[data-run]").forEach((b) => (b.disabled = on));
+const reveal = () => { if (narrow()) $("runCard").scrollIntoView({ behavior: "smooth", block: "start" }); };
+async function start(name) {
+  const res = await fetch("/api/runs", { method: "POST", headers: { "content-type": "application/json", ...authHeaders() }, body: JSON.stringify({ scenario: name }) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) { setStatus("fail", body.error_description ?? body.error ?? `The run didn't start (HTTP ${res.status}).`); return reveal(); }
+  watch(body.id, name);
+}
+const row = (t) => `<div class="row"><span class="who ${cls(t.actor)}">${esc(t.actor)}</span><span>${esc(t.text)}</span></div>`;
+function watch(id, name) {
+  const tl = $("timeline");
+  tl.innerHTML = "";
+  $("resultCard").hidden = true;
+  setStatus("run", `Running “${titleOf(name)}” live…`);
+  busy(true);
+  reveal();
+  let finished = false;
+  const finish = async () => {
+    if (finished) return;
+    finished = true;
+    const run = await fetch(`/api/runs/${id}`).then((r) => r.json());
+    tl.innerHTML = run.timeline.map(row).join("");
+    tl.scrollTop = tl.scrollHeight;
+    busy(false);
+    if (run.status === "running") { finished = false; return setTimeout(finish, 700); }
+    show(run);
+    recent();
+  };
+  const es = new EventSource(`/api/runs/${id}/events`);
+  es.addEventListener("entry", (e) => { tl.insertAdjacentHTML("beforeend", row(JSON.parse(e.data))); tl.scrollTop = tl.scrollHeight; });
+  es.addEventListener("done", () => { es.close(); finish(); });
+  es.onerror = () => { es.close(); setTimeout(finish, 500); };
+}
+function show(run) {
+  const r = run.result;
+  setStatus(run.status === "passed" ? "ok" : "fail", `${titleOf(run.scenario)}: ${run.status}, ${r.checks.passed}/${r.checks.total} checks`);
+  $("checks").innerHTML = r.checks.items.map((c) => `<li><span class="${c.ok ? "ok" : "no"}">${c.ok ? "✓" : "✗"}</span><span>${esc(c.name)}${c.detail && !c.ok ? ` <span class="muted">— ${esc(c.detail)}</span>` : ""}</span></li>`).join("");
+  const box = $("records");
+  box.innerHTML = r.records.length ? "" : `<div class="small muted">No record in this run.</div>`;
+  r.records.forEach((entry, i) => {
+    const rec = entry.record;
+    const v = rec.verdict;
+    const el = document.createElement("div");
+    el.className = "r";
+    const claims = rec.claims.map((c) => `<tr><td>${esc(c.source)}${c.vantage ? ` <span class="muted">via ${esc(c.vantage)}</span>` : ""}</td><td>${esc(c.status)}${c.status === "error" ? ` (${esc(c.outcome)})` : ""}</td><td>${c.view ? esc(c.view.endpoint ?? "") : ""}</td></tr>`).join("");
+    el.innerHTML = `<div><b>${esc(entry.label)}</b> <span class="badge ${v === "AGREE" ? "clean" : v === "DIVERGENT" ? "bad" : "insufficient"}">${esc(v)}</span> <span class="small muted">${rec.findings.length ? `findings: ${rec.findings.map((f) => esc(f.kind)).join(", ")}` : "no findings"} · record ${esc(rec.record_id.slice(0, 16))}…</span></div>
+      <table class="claims"><tbody>${claims}</tbody></table>
+      <div class="row" style="margin-top:6px"><button class="btn secondary small" data-verify="${i}">Verify in this browser</button><button class="btn secondary small" data-raw="${i}">Raw</button><span class="small" id="v-${i}"></span></div><pre id="raw-${i}" hidden>${esc(JSON.stringify(rec, null, 2))}</pre>`;
+    box.appendChild(el);
+    el.querySelector("[data-verify]").onclick = async () => {
+      const res = await verifyRecord(rec, { trustedSweeper: config.sweeper });
+      $(`v-${i}`).innerHTML = res.ok ? `<span style="color:var(--good);font-weight:700">✓ valid</span> against this site's key` : `<span style="color:var(--warn);font-weight:700">✗ ${esc(res.why)}</span>`;
+    };
+    el.querySelector("[data-raw]").onclick = () => { const p = $(`raw-${i}`); p.hidden = !p.hidden; };
+  });
+  $("sourcesLine").innerHTML = r.sources ? `This run's sources, as they were left: <a href="${esc(r.sources)}">${esc(r.sources)}</a> (kept while the run is among the most recent).` : "";
+  $("resultCard").hidden = false;
+}
+async function recent() {
+  const runs = await fetch("/api/runs").then((r) => r.json()).catch(() => []);
+  $("recent").innerHTML = runs.length ? runs.slice(0, 12).map((r) => `<div><b>${esc(titleOf(r.scenario))}</b> · ${esc(r.status)}${r.checks ? ` ${r.checks.passed}/${r.checks.total}` : ""} · <span class="muted">${esc(new Date(r.finished_at ?? r.started_at).toLocaleTimeString())}</span></div>`).join("") : "None yet.";
+}
+recent();
+</script>
+</body>
+</html>
