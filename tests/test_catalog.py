@@ -33,10 +33,12 @@ from sm_divergence.discovery import (
     OUTCOME_NESTED_NOT_READ,
     OUTCOME_NO_CATALOG,
     OUTCOME_REDIRECTED,
+    AmbiguousEntry,
     CatalogResolver,
     DnsAnswer,
     DnsSvcbResolver,
     RecordView,
+    a2a_interface_url,
     air_identifier,
     entry_to_view,
     latest_entries,
@@ -437,6 +439,144 @@ async def test_subject_that_is_a_nested_catalog_by_url() -> None:
     assert await outcome_of(resolver(documents=documents)) == ("error", None, OUTCOME_NESTED_NOT_READ)
     _, view, _ = await outcome_of(resolver(documents=documents, follow_nested=True, artifact_type=MCP))
     assert view == RecordView(endpoint=MCP_CARD)
+
+
+# --- matching on another member, and artifacts carried inline -----------------
+
+AGENT_URL = "https://agents.example.com/support"
+
+
+def card(*interfaces: tuple[str, str], top_url: str | None = None, wrapped: bool = True) -> dict[str, Any]:
+    body: dict[str, Any] = {"name": "Support", "version": "1.0.0"}
+    if interfaces:
+        body["supportedInterfaces"] = [
+            {"protocolBinding": b, "protocolVersion": "1.0", "url": u} for b, u in interfaces
+        ]
+    if top_url is not None:
+        body["url"] = top_url
+    return {"card_data": body, "card_schema_version": "v1.0.0"} if wrapped else body
+
+
+def revision(cid: str, version: str, updated: str, data: dict[str, Any], name: str = AGENT_URL) -> dict[str, Any]:
+    """An entry whose identifier is content-addressed: a new one per revision."""
+    return {
+        "identifier": f"urn:air:example.org:cid:{cid}",
+        "displayName": name,
+        "version": version,
+        "updatedAt": updated,
+        "type": A2A,
+        "data": data,
+    }
+
+
+OLD = revision("aaaa", "0.1.0", "2026-10-19T03:00:00Z", card(("JSONRPC", AGENT_URL + "/v1")))
+NEW = revision(
+    "bbbb",
+    "0.1.1",
+    "2026-10-19T16:00:00Z",
+    card(("JSONRPC", AGENT_URL + "/a2a"), ("SLIMRPC", "slim://example/support")),
+)
+
+
+def by_name(*entries: Any, **kw: Any) -> CatalogResolver:
+    kw.setdefault("match_on", "displayName")
+    return resolver(catalog(*entries), **kw)
+
+
+@pytest.mark.asyncio
+async def test_content_addressed_revisions_are_matched_by_another_member() -> None:
+    # No identifier survives a revision, so the identifier cannot name the subject.
+    assert (await outcome_of(resolver(catalog(OLD, NEW)), AGENT_URL))[0] == "absent"
+    status, view, _ = await outcome_of(by_name(OLD, NEW), AGENT_URL)
+    assert status == "present" and view == RecordView()  # found, with nothing read out of the inline card
+
+
+@pytest.mark.asyncio
+async def test_inline_endpoint_reads_the_latest_revisions_interface() -> None:
+    r = by_name(NEW, OLD, inline_endpoint=a2a_interface_url("jsonrpc"))
+    _, view, _ = await outcome_of(r, AGENT_URL)
+    assert view == RecordView(endpoint=AGENT_URL + "/a2a")
+    _, slim, _ = await outcome_of(by_name(OLD, NEW, inline_endpoint=a2a_interface_url("SLIMRPC")), AGENT_URL)
+    assert slim == RecordView(endpoint="slim://example/support")
+
+
+@pytest.mark.asyncio
+async def test_several_interfaces_and_no_binding_chosen_is_ambiguous() -> None:
+    r = by_name(NEW, inline_endpoint=a2a_interface_url())
+    assert await outcome_of(r, AGENT_URL) == ("error", None, OUTCOME_AMBIGUOUS_ENTRY)
+    # One interface is unambiguous without a binding.
+    _, view, _ = await outcome_of(by_name(OLD, inline_endpoint=a2a_interface_url()), AGENT_URL)
+    assert view == RecordView(endpoint=AGENT_URL + "/v1")
+
+
+@pytest.mark.asyncio
+async def test_no_interface_for_the_binding_contributes_no_endpoint() -> None:
+    _, view, _ = await outcome_of(by_name(OLD, inline_endpoint=a2a_interface_url("GRPC")), AGENT_URL)
+    assert view == RecordView()
+
+
+def test_a2a_interface_url_shapes() -> None:
+    read = a2a_interface_url()
+    assert read(card(top_url="https://a.example/")) == "https://a.example/"  # no interface list: top-level url
+    assert read(card(top_url="https://a.example/", wrapped=False)) == "https://a.example/"
+    assert read(card(("JSONRPC", "https://a.example/a2a"), wrapped=False)) == "https://a.example/a2a"
+    assert read(card()) is None
+    # A binding cannot be matched against a bare top-level url.
+    assert a2a_interface_url("JSONRPC")(card(top_url="https://a.example/")) is None
+    # The same address listed twice is one address.
+    assert (
+        read(card(("JSONRPC", "https://a.example/a2a"), ("HTTP+JSON", "https://a.example/a2a")))
+        == "https://a.example/a2a"
+    )
+    with pytest.raises(AmbiguousEntry):
+        read(card(("JSONRPC", "https://a.example/a2a"), ("GRPC", "https://a.example/grpc")))
+    with pytest.raises(ValueError):
+        read(["not", "an", "object"])
+    with pytest.raises(ValueError):
+        read({"supportedInterfaces": ["not-an-object"]})
+
+
+@pytest.mark.asyncio
+async def test_an_inline_artifact_that_cannot_be_read_is_unparseable() -> None:
+    bad = revision("cccc", "1.0.0", "2026-10-19T00:00:00Z", {"supportedInterfaces": ["x"]})
+    r = by_name(bad, inline_endpoint=a2a_interface_url())
+    assert await outcome_of(r, AGENT_URL) == ("error", None, OUTCOME_UNPARSEABLE)
+
+
+@pytest.mark.asyncio
+async def test_inline_endpoint_does_not_touch_entries_that_carry_a_url() -> None:
+    def boom(data: Any) -> str | None:
+        raise AssertionError("an entry with a url has no inline artifact to read")
+
+    assert (await outcome_of(resolver(inline_endpoint=boom)))[1] == RecordView(endpoint=CARD, digest=DIGEST_VALUE)
+
+
+@pytest.mark.asyncio
+async def test_match_on_reaches_into_nested_catalogs() -> None:
+    nested = {"identifier": "urn:air:example.org:catalog:a2a", "type": CATALOG, "url": "/catalogs/dept.json"}
+    documents = {WELL_KNOWN: catalog(nested), DEPT: catalog(OLD, NEW)}
+    r = resolver(
+        documents=documents, follow_nested=True, match_on="displayName", inline_endpoint=a2a_interface_url("JSONRPC")
+    )
+    _, view, _ = await outcome_of(r, AGENT_URL)
+    assert view == RecordView(endpoint=AGENT_URL + "/a2a")
+
+
+@pytest.mark.asyncio
+async def test_inline_service_endpoint_compares_with_a_zones_service_endpoint() -> None:
+    async def query(name: str, rdtype: str) -> DnsAnswer:
+        return DnsAnswer(svcb=svcb_rows_from_text('1 . alpn="a2a" port=443 key65402="a2a"'))
+
+    zone = DnsSvcbResolver(query=query, target="service", owner_for=lambda agent_id: "agents.example.com")
+    same = revision("dddd", "1.0.0", "2026-10-19T00:00:00Z", card(("JSONRPC", "https://agents.example.com/")))
+    agree = await Corroborator([by_name(same, inline_endpoint=a2a_interface_url(), label="catalog"), zone]).check(
+        [AGENT_URL]
+    )
+    assert all_findings(agree) == []
+    differ = await Corroborator(
+        [by_name(NEW, inline_endpoint=a2a_interface_url("JSONRPC"), label="catalog"), zone]
+    ).check([AGENT_URL])
+    assert kinds(differ) == [ENDPOINT]
 
 
 # --- sweep-level --------------------------------------------------------------

@@ -317,6 +317,26 @@ not read (`follow_nested=True` reads them, within bounds). Only a catalog read
 in full that lists no such identifier is `absent`. A redirect is not followed
 unless `follow_redirects=True`. Artifacts are never fetched.
 
+Some directories give every revision of an agent a new, content-addressed
+identifier and carry the agent card inline. `match_on="displayName"` compares
+another entry member instead, the latest revision is taken, and
+`inline_endpoint=a2a_interface_url("JSONRPC")` reads the agent's service
+endpoint out of the inline card.
+
+**One subject, many names.** A zone knows an agent by FQDN, a log by an entry
+id, a catalog by an identifier. `SubjectMap` holds those names and hands each
+resolver its mapping:
+
+```python
+subjects = SubjectMap({"support-agent": {"fqdn": "agent.example.com", "catalog": "urn:air:example.com:support"}})
+DnsZoneResolver(owner_for=subjects.name("fqdn"))
+CatalogResolver("https://example.com", identifier_for=subjects.name("catalog"))
+```
+
+A subject with no name for a source is an `error` claim from that source —
+excluded, never `absent` — so a gap in the mapping cannot show up as an
+omission.
+
 `examples/live_sweep.py` runs any of these against live sources from the command
 line: `python examples/live_sweep.py agent.example.com --zone --doh <resolver>
 --log <log> --log-keys <file>`.

@@ -68,6 +68,17 @@ A DNS zone becomes a source. No kernel change; `sm-resolver` 0.7 is unchanged.
   `ai.stellarminds.catalog.redirected`.
 - **`examples/live_sweep.py`** — corroborate one subject across live sources
   from the command line (not part of the offline example set).
+- **`SubjectMap`** (`discovery/subjects.py`) — the names one subject goes by in
+  each source, handed to resolvers as their mapping callables. A subject with no
+  name for a source is an `error` claim from it and no request is sent; tested
+  for every resolver that takes a mapping, beside a source that does hold the
+  subject, so a correspondence gap cannot become an omission finding.
+- **`CatalogResolver(match_on=…)`** — compare an entry member other than
+  `identifier`, for catalogs whose identifiers are content-addressed and change
+  with every revision.
+- **`CatalogResolver(inline_endpoint=…)`** and **`a2a_interface_url(binding)`** —
+  read the service endpoint out of an agent card carried inline. Several
+  interfaces with no binding chosen is `ai.stellarminds.catalog.ambiguous-entry`.
 - **`reduce_svcb_rows` / `reduce_ans_txt`** — the pure row-to-claim reductions,
   shared by the DNS resolvers and the log resolver.
 - **`ans_agent_adapter`** — a `RecordAdapter` for an agent record that lists

@@ -24,7 +24,9 @@ from .catalog import (
     OUTCOME_NO_CATALOG,
     OUTCOME_REDIRECTED,
     WELL_KNOWN_CATALOG_PATH,
+    AmbiguousEntry,
     CatalogResolver,
+    a2a_interface_url,
     air_identifier,
     entry_to_view,
     identity_identifier,
@@ -73,6 +75,7 @@ from .log_receipt import (
     verify_receipt,
     verify_status_token,
 )
+from .subjects import SubjectMap
 from .views import (
     DID,
     DIGEST,
@@ -85,6 +88,7 @@ from .views import (
 )
 
 __all__ = [
+    "AmbiguousEntry",
     "AnsLogResolver",
     "AnsV2Resolver",
     "CATALOG_MEDIA_TYPE",
@@ -120,11 +124,13 @@ __all__ = [
     "RecordAdapter",
     "RecordView",
     "SubjectFn",
+    "SubjectMap",
     "SvcParamKeyMap",
     "SvcbRow",
     "VerifiedReceipt",
     "VerifiedStatusToken",
     "WELL_KNOWN_CATALOG_PATH",
+    "a2a_interface_url",
     "agent_name_subject",
     "air_identifier",
     "ans_agent_adapter",
