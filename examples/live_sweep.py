@@ -17,6 +17,12 @@ deployment — the subject, the log, the resolvers and the catalog are arguments
     python examples/live_sweep.py urn:air:example.com:support \\
         --catalog https://example.com
 
+    # a directory whose identifiers change with every revision: match on the
+    # display name, read the endpoint out of the inline agent card
+    python examples/live_sweep.py https://agents.example.com/support \\
+        --catalog https://directory.example --follow-nested \\
+        --catalog-match displayName --catalog-inline JSONRPC
+
 `--zone` reads the SVCB rows at the subject, or the `v=ans1` TXT rows at
 `_ans.{subject}` when it publishes no SVCB row. Each `--doh` URL is one recursive resolver, queried with DNS
 over HTTPS, and one vantage; without any, the system resolver is used.
@@ -48,6 +54,7 @@ from sm_divergence.discovery import (
     DnspythonQuery,
     DnsZoneResolver,
     DohQuery,
+    a2a_interface_url,
 )
 
 
@@ -65,6 +72,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--catalog", metavar="URL", help="a publisher's origin")
     parser.add_argument("--catalog-id", metavar="ID", help="entry identifier, if not the subject itself")
     parser.add_argument("--artifact-type", help="catalog entry media type to select")
+    parser.add_argument("--catalog-path", action="append", metavar="PATH", help="catalog path to try (repeatable)")
+    parser.add_argument("--catalog-match", default="identifier", metavar="MEMBER", help="entry member to match on")
+    parser.add_argument(
+        "--catalog-inline",
+        metavar="BINDING",
+        help="read an inline agent card's interface for this binding ('' for any)",
+    )
     parser.add_argument("--follow-redirects", action="store_true")
     parser.add_argument("--follow-nested", action="store_true")
     parser.add_argument("--timeout", type=float, default=15.0)
@@ -124,6 +138,11 @@ async def build_sources(args: argparse.Namespace) -> list[Any]:
                 args.catalog,
                 identifier_for=lambda _subject: identifier,
                 artifact_type=args.artifact_type,
+                match_on=args.catalog_match,
+                inline_endpoint=(
+                    a2a_interface_url(args.catalog_inline or None) if args.catalog_inline is not None else None
+                ),
+                **({"catalog_paths": args.catalog_path} if args.catalog_path else {}),
                 follow_redirects=args.follow_redirects,
                 follow_nested=args.follow_nested,
                 timeout=args.timeout,

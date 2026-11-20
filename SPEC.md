@@ -355,7 +355,11 @@ and withhold its superseded target from the field comparison.
      a catalog; a timeout →
      `error`/`timeout`; a body that is not a catalog → `error`/`unparseable`.
   2. The canonical id maps to an entry `identifier` via a caller-supplied
-     `identifier_for`; identifiers are compared exactly. Entries are searched in
+     `identifier_for`; identifiers are compared exactly. Where a catalog's
+     identifiers are content-addressed — a new one for every revision of the
+     same agent — the resolver MAY be configured to compare another entry member
+     (`displayName`, say) instead; the revisions it matches are then ordered by
+     step 4. Entries are searched in
      the root and in every nested catalog carried inline, to a depth bound
      (default 4). A nested catalog referenced by `url` is read only when
      `follow_nested` is set, within the depth bound and a document bound, and
@@ -370,13 +374,26 @@ and withhold its superseded target from the field comparison.
      `artifact_type` configured, only candidates whose `type` (or the earlier
      member name `mediaType`) equals it are kept; no candidate kept → `absent`.
   5. A candidate MUST carry exactly one of `url` and `data`. `url` → `endpoint`;
-     `digest` → `digest`; an entry carrying `data` contributes `endpoint = null`.
+     `digest` → `digest`; an entry carrying `data` contributes `endpoint = null`,
+     unless the resolver is configured to read an address out of the inline
+     artifact. For an inline agent card that address is the `url` of the
+     `supportedInterfaces[]` entry with the configured `protocolBinding` (or the
+     card's top-level `url` when it has no such list); it is the agent's service
+     endpoint, not a descriptor. More than one address remaining → `error` with
+     the ambiguous-entry outcome.
      Candidates whose views differ → `error` with outcome
      `ai.stellarminds.catalog.ambiguous-entry`. A malformed candidate →
      `error`/`unparseable`; a malformed entry for another identifier is ignored,
      as are unknown members.
   The resolver never fetches an artifact and never checks a digest against
   content. No `did` and no lease position.
+- **Identity correspondence.** A sweep asks every source about one canonical
+  id, and each source files the subject under its own name. The mapping from the
+  canonical id to a source's name is the caller's. When that mapping has no name
+  for a subject — the callable raises — the source's claim MUST be `error` and
+  no request is sent: a subject a source cannot be asked about is excluded from
+  that source, never reported `absent`, so a correspondence gap cannot surface
+  as an omission finding.
 - **By-id resolver, `404` on a credentialed route.** Where a by-id route requires
   a credential and answers `404` both for an agent that does not exist and for
   one the caller may not see, a `404` is not a claim of absence and MUST be

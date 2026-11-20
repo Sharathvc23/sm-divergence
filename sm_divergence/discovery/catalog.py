@@ -16,12 +16,18 @@ diffs against a registry, a zone or a log with no special-casing downstream.
 **What an entry contributes.** ``url`` → ``endpoint`` (the descriptor: the same
 thing a registry's terminal target and a zone's descriptor key name) and
 ``digest`` → ``digest``. An entry that carries its artifact inline (``data``)
-has no address, so it contributes ``endpoint=None`` with its digest. A catalog
+has no address, so it contributes ``endpoint=None`` with its digest — unless an
+``inline_endpoint`` reads one out of the artifact (``a2a_interface_url`` does,
+for an agent card). That address is the agent's *service* endpoint, so compare
+it with sources configured for the service endpoint, not the descriptor. A catalog
 entry names no service endpoint and no key, so there is no ``did``.
 
 **Selecting the entry.** ``identifier_for`` maps the canonical watch id to the
 entry ``identifier`` (identity correspondence is the caller's; identifiers are
-compared exactly). When the matched entry is itself an inline nested catalog —
+compared exactly). Where a catalog's identifiers are content-addressed — a new
+one for every revision of the same agent — they cannot name a subject over
+time; ``match_on`` then names another entry member (``displayName``, say) to
+compare instead, and the revisions it matches are ordered like versions. When the matched entry is itself an inline nested catalog —
 one subject offered over several protocols — its children are the candidates.
 ``artifact_type`` keeps only candidates of one media type. Of several versions
 of one identifier the latest is taken. Candidates that still reduce to different
@@ -60,6 +66,9 @@ from sm_resolver import (
 from .views import RecordView, normalize_endpoint
 
 IdentifierFn = Callable[[str], str]
+# Reads an address out of an artifact carried inline. Returns ``None`` when the
+# artifact names none; raises ``AmbiguousEntry`` when it names several.
+InlineEndpointFn = Callable[[Any], str | None]
 
 WELL_KNOWN_CATALOG_PATH = "/.well-known/ai-catalog.json"
 CATALOG_MEDIA_TYPE = "application/ai-catalog+json"
@@ -74,6 +83,11 @@ OUTCOME_NESTED_NOT_READ = "ai.stellarminds.catalog.nested-not-read"
 OUTCOME_REDIRECTED = "ai.stellarminds.catalog.redirected"
 # Several candidate entries reduce to different views.
 OUTCOME_AMBIGUOUS_ENTRY = "ai.stellarminds.catalog.ambiguous-entry"
+
+
+class AmbiguousEntry(ValueError):
+    """An entry that names more than one candidate value where one was asked for."""
+
 
 _SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
@@ -98,8 +112,12 @@ def entry_type(entry: dict[str, Any]) -> str | None:
     return None
 
 
-def entry_to_view(entry: dict[str, Any]) -> RecordView:
-    """Reduce one leaf CatalogEntry to the discovery view. Raises if malformed."""
+def entry_to_view(entry: dict[str, Any], inline_endpoint: InlineEndpointFn | None = None) -> RecordView:
+    """Reduce one leaf CatalogEntry to the discovery view. Raises if malformed.
+
+    An entry that carries its artifact inline has no ``url``; ``inline_endpoint``,
+    when given, reads an address out of that artifact instead.
+    """
     url, has_data = entry.get("url"), "data" in entry
     if (url is None) == (not has_data):
         raise ValueError("an entry carries exactly one of url and data")
@@ -108,7 +126,50 @@ def entry_to_view(entry: dict[str, Any]) -> RecordView:
     digest = entry.get("digest")
     if digest is not None and not (isinstance(digest, str) and digest):
         raise ValueError("digest is not a non-empty string")
+    if has_data and inline_endpoint is not None:
+        url = inline_endpoint(entry["data"])
+        if url is not None and not (isinstance(url, str) and url):
+            raise ValueError("inline endpoint is not a non-empty string")
     return RecordView(endpoint=url, digest=digest)
+
+
+def a2a_interface_url(binding: str | None = None) -> InlineEndpointFn:
+    """An ``inline_endpoint`` for an agent card carried inline.
+
+    Reads the card's ``supportedInterfaces[]`` (``protocolBinding``, ``url``),
+    keeping the interface whose binding is ``binding`` (compared without case)
+    when one is given; a card with no such list falls back to its top-level
+    ``url``. The card may sit directly in ``data`` or under ``data.card_data``.
+
+    Returns ``None`` when the card names no interface for the binding. Raises
+    ``AmbiguousEntry`` when more than one address remains: with several
+    interfaces listed, ``binding`` must be set.
+    """
+    wanted = binding.lower() if binding is not None else None
+
+    def endpoint(data: Any) -> str | None:
+        if not isinstance(data, dict):
+            raise ValueError("inline artifact is not an object")
+        wrapped = data.get("card_data")
+        card: dict[str, Any] = wrapped if isinstance(wrapped, dict) else data
+        interfaces = card.get("supportedInterfaces")
+        if not isinstance(interfaces, list):
+            top = card.get("url")
+            return top if isinstance(top, str) and top and wanted is None else None
+        urls: list[str] = []
+        for interface in interfaces:
+            if not isinstance(interface, dict):
+                raise ValueError("supportedInterfaces[] entry is not an object")
+            if wanted is not None and str(interface.get("protocolBinding", "")).lower() != wanted:
+                continue
+            url = interface.get("url")
+            if isinstance(url, str) and url and url not in urls:
+                urls.append(url)
+        if len(urls) > 1:
+            raise AmbiguousEntry("the card lists several interfaces; set binding")
+        return urls[0] if urls else None
+
+    return endpoint
 
 
 def _is_catalog(doc: Any) -> TypeGuard[dict[str, Any]]:
@@ -161,7 +222,9 @@ class CatalogResolver:
     when ``catalog_paths`` is ``("",)``. ``catalog_paths`` are tried in order and
     the first that is served is the catalog (default: the well-known path).
     ``identifier_for`` maps the watch id to the entry identifier;
-    ``artifact_type`` keeps candidates of one media type. ``follow_nested``
+    ``match_on`` names the entry member that value is compared with (default
+    ``identifier``); ``inline_endpoint`` reads an address out of an artifact
+    carried inline; ``artifact_type`` keeps candidates of one media type. ``follow_nested``
     reads nested catalogs referenced by ``url``. ``follow_redirects`` follows
     HTTP redirects (an apex that redirects to ``www``, say); off by default, so
     the claim is the asked origin's own, and a redirect is then ``error`` with
@@ -176,6 +239,8 @@ class CatalogResolver:
         base_url: str,
         *,
         identifier_for: IdentifierFn = identity_identifier,
+        match_on: str = "identifier",
+        inline_endpoint: InlineEndpointFn | None = None,
         artifact_type: str | None = None,
         catalog_paths: Sequence[str] = (WELL_KNOWN_CATALOG_PATH,),
         follow_nested: bool = False,
@@ -189,6 +254,8 @@ class CatalogResolver:
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.identifier_for = identifier_for
+        self.match_on = match_on
+        self.inline_endpoint = inline_endpoint
         self.artifact_type = artifact_type
         self.catalog_paths = tuple(catalog_paths) or (WELL_KNOWN_CATALOG_PATH,)
         self.follow_nested = follow_nested
@@ -289,7 +356,7 @@ class CatalogResolver:
             if not isinstance(entry, dict):
                 continue
             nested = entry_type(entry) == CATALOG_MEDIA_TYPE
-            if entry.get("identifier") == identifier:
+            if entry.get(self.match_on) == identifier:
                 walk.matches.append(await self._inlined(client, entry, catalog_url, seen, depth) if nested else entry)
                 continue
             if not nested:
@@ -368,7 +435,9 @@ class CatalogResolver:
         views: dict[tuple[tuple[str, str | None], ...], RecordView] = {}
         for entry in candidates:
             try:
-                view = entry_to_view(entry)
+                view = entry_to_view(entry, self.inline_endpoint)
+            except AmbiguousEntry:
+                return "error", None, OUTCOME_AMBIGUOUS_ENTRY
             except Exception:
                 return "error", None, OUTCOME_UNPARSEABLE
             views[tuple(sorted(view.comparable().items()))] = view
